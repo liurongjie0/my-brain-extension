@@ -1,3 +1,6 @@
 [submodule "superpowers"]
 	path = superpowers
 	url = https://github.com/obra/superpowers.git
+[submodule "claude-statusline"]
+	path = claude-statusline
+	url = https://github.com/daniel3303/ClaudeCodeStatusLine.git
