@@ -1,0 +1,5 @@
+# Runtime config (contains API keys)
+config.json
+
+# Sync state (auto-generated)
+state.json
