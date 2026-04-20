@@ -1,0 +1,50 @@
+# AI 日报配置
+# 请填入你的企业微信机器人 Webhook URL
+wechat_webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE"
+
+# 推送时间 (24小时制)
+push_time: "08:00"
+
+# 内容源开关
+sources:
+  github_trending: true
+  arxiv: true
+  hackernews: true
+  techcrunch: true
+  producthunt: true
+  anthropic: true
+
+# GitHub Trending 语言筛选 (空列表表示所有语言)
+github_languages:
+  - "python"
+  - "typescript"
+  - "rust"
+  - "go"
+
+# arXiv 分类
+arxiv_categories:
+  - "cs.AI"
+  - "cs.CL"
+  - "cs.LG"
+
+# Hacker News 最小分数 (越高越热门)
+hn_min_score: 100
+
+# TechCrunch 标签
+techcrunch_tags:
+  - "artificial-intelligence"
+  - "machine-learning"
+
+# Product Hunt Access Token (留空则跳过该源)
+producthunt_access_token: ""
+
+# 每个源最大条目数
+max_items_per_source: 5
+
+# Claude API 配置 (兼容 Kimi API)
+claude_api_key: "sk-kimi-wizCJbeo40c5bi98g9FgohvKluvZUxv623dmxASJQ2IBxFHa3GwTWSpxs4uqWLow"
+claude_base_url: "https://api.kimi.com/coding/"
+claude_model: "claude-opus-4-7"
+
+# 摘要最大长度 (字)
+summary_max_length: 60
