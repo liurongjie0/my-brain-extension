@@ -10,7 +10,7 @@
 
 | 模块 | 说明 | 类型 |
 |------|------|------|
-| [cc-bridge-v2](./cc-bridge-v2) | Claude Code → Langfuse 观测桥接器。消息级粒度实时追踪，支持增量同步。 | 自有项目 |
+| [cc-bridge-v2](https://github.com/liurongjie0/cc-bridge) | Claude Code → Langfuse 观测桥接器。消息级粒度实时追踪，支持增量同步。 | 独立仓库 |
 | [claude-notes](./claude-notes) | 学习笔记：system prompt 研究、上下文工程模型、部署指南。 | 自有内容 |
 | [claude-statusline](./claude-statusline) | Claude Code 自定义状态栏，显示模型信息、token 用量、速率限制。 | 子模块 |
 | [superpowers](./superpowers) | 面向编码智能体的可组合技能方法论（TDD、调试、规划、代码审查等）。 | 子模块 |
@@ -40,7 +40,7 @@ git submodule update --remote
 - 自动生成会话级别的 trace/span
 - 支持附件、系统消息、快照等元数据
 
-[→ 进入项目](./cc-bridge-v2)
+[→ 进入项目](https://github.com/liurongjie0/cc-bridge)
 
 ### claude-notes
 
