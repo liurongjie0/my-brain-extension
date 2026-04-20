@@ -4,3 +4,6 @@
 [submodule "claude-statusline"]
 	path = claude-statusline
 	url = https://github.com/daniel3303/ClaudeCodeStatusLine.git
+[submodule "cc-bridge-v2"]
+	path = cc-bridge-v2
+	url = git@github.com:liurongjie0/cc-bridge.git
