@@ -18,6 +18,7 @@ logs/
 *.temp
 *.cache
 .superpowers/
+.worktrees/
 
 # Node
 node_modules/
