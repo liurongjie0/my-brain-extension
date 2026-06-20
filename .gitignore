@@ -17,6 +17,7 @@ logs/
 *.tmp
 *.temp
 *.cache
+.superpowers/
 
 # Node
 node_modules/
