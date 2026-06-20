@@ -23,7 +23,8 @@ services:
     container_name: agent-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      # 宿主用 6380 避开常见的 6379 占用(如本机其它 redis/langfuse); 容器内仍是 6379
+      - "6380:6379"
       - "8001:8001"
     volumes:
       - redis-data:/data

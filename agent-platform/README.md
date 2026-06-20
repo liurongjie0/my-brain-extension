@@ -17,7 +17,7 @@
 
 ```bash
 cd agent-platform
-docker compose up -d        # mysql:3306, redis-stack:6379, RedisInsight:8001
+docker compose up -d        # mysql:3306, redis-stack:6380(宿主), RedisInsight:8001
 ```
 
 ### 2. 配置环境变量
@@ -60,6 +60,16 @@ npm run dev     # http://localhost:5173 ，Vite 代理 /api 到 8080
 - `/admin/knowledge` 知识库与文档上传、检索测试
 - `/admin/tools` HTTP 工具配置与测试
 - `/admin/conversations` 会话审计
+
+## 监控 / 可观测性
+
+Spring Boot Actuator 已启用：
+
+- `GET /actuator/health` — 整体健康 + 组件明细（DB / Redis / 磁盘）
+- `GET /actuator/metrics` — JVM/HTTP/连接池等指标（`/actuator/metrics/{name}` 看单项）
+- `GET /actuator/info` — 应用信息
+
+（如需 Prometheus 抓取，加 `micrometer-registry-prometheus` 依赖并把 `prometheus` 加入 `management.endpoints.web.exposure.include`。）
 
 ## 测试
 
