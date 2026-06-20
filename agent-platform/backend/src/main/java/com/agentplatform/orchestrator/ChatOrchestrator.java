@@ -12,6 +12,10 @@ import com.agentplatform.chat.MessageEntity;
 import com.agentplatform.chat.MessageRepository;
 import com.agentplatform.chat.MessageRole;
 import com.agentplatform.common.BusinessException;
+import com.agentplatform.mcp.McpTools;
+import com.agentplatform.model.ChatModelFactory;
+import com.agentplatform.model.ModelConfigEntity;
+import com.agentplatform.model.ModelConfigRepository;
 import com.agentplatform.rag.RagRetriever;
 import com.agentplatform.rag.dto.RetrieveResult;
 import com.agentplatform.tool.ToolCallbackFactory;
@@ -62,12 +66,17 @@ public class ChatOrchestrator {
     private final ToolCallbackFactory toolCallbackFactory;
     private final ToolCallingManager toolCallingManager;
     private final ObjectMapper objectMapper;
+    private final ModelConfigRepository modelConfigs;
+    private final ChatModelFactory chatModelFactory;
+    private final McpTools mcpTools;
 
     public ChatOrchestrator(ChatModel chatModel, AgentRepository agents,
                             ConversationRepository conversations, MessageRepository messages,
                             AgentKnowledgeBaseRepository bindings, RagRetriever retriever,
                             AgentToolRepository agentTools, ToolCallbackFactory toolCallbackFactory,
-                            ToolCallingManager toolCallingManager, ObjectMapper objectMapper) {
+                            ToolCallingManager toolCallingManager, ObjectMapper objectMapper,
+                            ModelConfigRepository modelConfigs, ChatModelFactory chatModelFactory,
+                            McpTools mcpTools) {
         this.chatModel = chatModel;
         this.agents = agents;
         this.conversations = conversations;
@@ -78,6 +87,9 @@ public class ChatOrchestrator {
         this.toolCallbackFactory = toolCallbackFactory;
         this.toolCallingManager = toolCallingManager;
         this.objectMapper = objectMapper;
+        this.modelConfigs = modelConfigs;
+        this.chatModelFactory = chatModelFactory;
+        this.mcpTools = mcpTools;
     }
 
     public Flux<ChatChunk> chat(Long agentId, Long conversationId, String userMessage, String userId) {
@@ -94,19 +106,34 @@ public class ChatOrchestrator {
         BuiltContext ctx = buildContext(agent, convId, userMessage);
         List<Long> toolIds = agentTools.findByAgentId(agent.getId()).stream()
                 .map(AgentToolEntity::getToolId).toList();
-        List<ToolCallback> toolCallbacks = toolCallbackFactory.build(toolIds);
+        List<ToolCallback> toolCallbacks = new ArrayList<>(toolCallbackFactory.build(toolIds));
+        toolCallbacks.addAll(mcpTools.forAgent(agent.getId()));
+        ResolvedModel rm = resolveModel(agent);
 
         if (AGENT_TYPE_REACT.equals(agent.getAgentType()) && !toolCallbacks.isEmpty()) {
-            return reactChat(agent, convId, ctx, toolCallbacks);
+            return reactChat(agent, convId, ctx, toolCallbacks, rm);
         }
-        return streamChat(agent, convId, ctx, toolCallbacks);
+        return streamChat(agent, convId, ctx, toolCallbacks, rm);
+    }
+
+    /** Resolved model endpoint + model id for an agent (per its model config, or the global default). */
+    private record ResolvedModel(ChatModel model, String modelName) {}
+
+    private ResolvedModel resolveModel(AgentEntity agent) {
+        if (agent.getModelConfigId() != null) {
+            ModelConfigEntity cfg = modelConfigs.findById(agent.getModelConfigId()).orElse(null);
+            if (cfg != null) {
+                return new ResolvedModel(chatModelFactory.forConfig(cfg), cfg.getModel());
+            }
+        }
+        return new ResolvedModel(chatModel, agent.getModel());
     }
 
     // ===== streaming path (chat / rag / tool, framework internal tool execution) =====
 
-    private Flux<ChatChunk> streamChat(AgentEntity agent, Long convId,
-                                       BuiltContext ctx, List<ToolCallback> toolCallbacks) {
-        OpenAiChatOptions.Builder ob = baseOptions(agent);
+    private Flux<ChatChunk> streamChat(AgentEntity agent, Long convId, BuiltContext ctx,
+                                       List<ToolCallback> toolCallbacks, ResolvedModel rm) {
+        OpenAiChatOptions.Builder ob = baseOptions(agent, rm.modelName());
         if (!toolCallbacks.isEmpty()) {
             ob.toolCallbacks(toolCallbacks);
         }
@@ -116,7 +143,7 @@ public class ChatOrchestrator {
         AtomicInteger tokenUsage = new AtomicInteger(0);
 
         Flux<ChatChunk> head = Flux.fromIterable(headChunks(convId, ctx.sources()));
-        Flux<ChatChunk> tokens = chatModel.stream(prompt)
+        Flux<ChatChunk> tokens = rm.model().stream(prompt)
                 .doOnNext(resp -> captureUsage(resp, tokenUsage))
                 .map(resp -> {
                     String text = resp.getResult().getOutput().getText();
@@ -140,8 +167,8 @@ public class ChatOrchestrator {
 
     // ===== react path (manual tool-calling loop, incremental step events + trajectory) =====
 
-    private Flux<ChatChunk> reactChat(AgentEntity agent, Long convId,
-                                      BuiltContext ctx, List<ToolCallback> toolCallbacks) {
+    private Flux<ChatChunk> reactChat(AgentEntity agent, Long convId, BuiltContext ctx,
+                                      List<ToolCallback> toolCallbacks, ResolvedModel rm) {
         return Flux.create(sink -> {
             StringBuilder finalText = new StringBuilder();
             List<Map<String, Object>> trajectory = new ArrayList<>();
@@ -151,13 +178,13 @@ public class ChatOrchestrator {
                     sink.next(s);
                 }
 
-                OpenAiChatOptions options = baseOptions(agent)
+                OpenAiChatOptions options = baseOptions(agent, rm.modelName())
                         .toolCallbacks(toolCallbacks)
                         .internalToolExecutionEnabled(false)
                         .build();
 
                 Prompt prompt = new Prompt(new ArrayList<>(ctx.messages()), options);
-                ChatResponse response = chatModel.call(prompt);
+                ChatResponse response = rm.model().call(prompt);
                 int steps = 0;
 
                 while (response.hasToolCalls() && steps < MAX_STEPS) {
@@ -178,7 +205,7 @@ public class ChatOrchestrator {
                     }
 
                     prompt = new Prompt(execResult.conversationHistory(), options);
-                    response = chatModel.call(prompt);
+                    response = rm.model().call(prompt);
                     steps++;
                 }
 
@@ -226,9 +253,9 @@ public class ChatOrchestrator {
         return byId;
     }
 
-    private OpenAiChatOptions.Builder baseOptions(AgentEntity agent) {
+    private OpenAiChatOptions.Builder baseOptions(AgentEntity agent, String modelName) {
         return OpenAiChatOptions.builder()
-                .model(agent.getModel())
+                .model(modelName)
                 .temperature(agent.getTemperature())
                 .maxTokens(agent.getMaxTokens())
                 .topP(agent.getTopP());

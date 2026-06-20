@@ -59,6 +59,7 @@ public class AgentService {
         e.setTopP(req.topP() != null ? req.topP() : 1.0);
         e.setMaxTokens(req.maxTokens() != null ? req.maxTokens() : 2048);
         e.setAgentType(req.agentType() != null ? req.agentType() : "chat");
+        e.setModelConfigId(req.modelConfigId());
         e.setEnabled(req.enabled() != null ? req.enabled() : true);
     }
 }

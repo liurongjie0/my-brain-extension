@@ -15,6 +15,7 @@ public record AgentResponse(
         Double topP,
         Integer maxTokens,
         String agentType,
+        Long modelConfigId,
         Boolean enabled,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -23,7 +24,7 @@ public record AgentResponse(
         return new AgentResponse(
                 e.getId(), e.getName(), e.getDescription(), e.getAvatar(),
                 e.getSystemPrompt(), e.getModel(), e.getTemperature(), e.getTopP(),
-                e.getMaxTokens(), e.getAgentType(), e.getEnabled(),
+                e.getMaxTokens(), e.getAgentType(), e.getModelConfigId(), e.getEnabled(),
                 e.getCreatedAt(), e.getUpdatedAt());
     }
 }

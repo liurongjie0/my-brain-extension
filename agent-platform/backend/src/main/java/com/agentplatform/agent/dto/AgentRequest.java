@@ -7,10 +7,11 @@ public record AgentRequest(
         String description,
         String avatar,
         String systemPrompt,
-        @NotBlank(message = "model 不能为空") String model,
+        String model,
         Double temperature,
         Double topP,
         Integer maxTokens,
         String agentType,
+        Long modelConfigId,
         Boolean enabled
 ) {}

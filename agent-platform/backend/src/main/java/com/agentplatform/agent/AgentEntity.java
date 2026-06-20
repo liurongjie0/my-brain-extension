@@ -33,6 +33,9 @@ public class AgentEntity {
     @Column(name = "agent_type")
     private String agentType;
 
+    @Column(name = "model_config_id")
+    private Long modelConfigId;
+
     private Boolean enabled;
 
     @CreationTimestamp
@@ -63,6 +66,8 @@ public class AgentEntity {
     public void setTopP(Double topP) { this.topP = topP; }
     public String getAgentType() { return agentType; }
     public void setAgentType(String agentType) { this.agentType = agentType; }
+    public Long getModelConfigId() { return modelConfigId; }
+    public void setModelConfigId(Long modelConfigId) { this.modelConfigId = modelConfigId; }
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
     public LocalDateTime getCreatedAt() { return createdAt; }

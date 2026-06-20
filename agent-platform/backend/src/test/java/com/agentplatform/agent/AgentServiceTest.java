@@ -18,7 +18,7 @@ class AgentServiceTest extends IntegrationTestBase {
     @Test
     void create_applies_defaults() {
         AgentRequest req = new AgentRequest("助手", null, null, "你好", "gpt-4o-mini",
-                null, null, null, null, null);
+                null, null, null, null, null, null);
         AgentResponse r = service.create(req);
 
         assertThat(r.id()).isNotNull();
@@ -32,9 +32,9 @@ class AgentServiceTest extends IntegrationTestBase {
     @Test
     void update_changes_fields() {
         AgentResponse created = service.create(new AgentRequest("a", null, null, null,
-                "gpt-4o-mini", null, null, null, null, null));
+                "gpt-4o-mini", null, null, null, null, null, null));
         AgentResponse updated = service.update(created.id(), new AgentRequest("b", "desc", null,
-                "sys", "gpt-4o", 0.2, 0.9, 512, "rag", false));
+                "sys", "gpt-4o", 0.2, 0.9, 512, "rag", null, false));
 
         assertThat(updated.name()).isEqualTo("b");
         assertThat(updated.model()).isEqualTo("gpt-4o");
