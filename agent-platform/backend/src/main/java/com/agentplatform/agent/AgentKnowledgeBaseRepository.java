@@ -12,4 +12,8 @@ public interface AgentKnowledgeBaseRepository extends JpaRepository<AgentKnowled
     @Modifying
     @Transactional
     void deleteByAgentId(Long agentId);
+
+    @Modifying
+    @Transactional
+    void deleteByKbId(Long kbId);
 }

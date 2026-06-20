@@ -2,6 +2,8 @@ package com.agentplatform.rag;
 
 import com.agentplatform.common.BusinessException;
 import com.agentplatform.rag.dto.DocumentResponse;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -17,6 +19,7 @@ public class DocumentService {
 
     private final DocumentRepository repository;
     private final KnowledgeBaseService kbService;
+    private final VectorStore vectorStore;
     private final ConcurrentHashMap<Long, String> rawTextById = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -25,9 +28,11 @@ public class DocumentService {
     @Value("${rag.auto-process:true}")
     private boolean autoProcess;
 
-    public DocumentService(DocumentRepository repository, KnowledgeBaseService kbService) {
+    public DocumentService(DocumentRepository repository, KnowledgeBaseService kbService,
+                           VectorStore vectorStore) {
         this.repository = repository;
         this.kbService = kbService;
+        this.vectorStore = vectorStore;
     }
 
     // setter injection with @Lazy to break the cycle (processing depends on this service)
@@ -72,7 +77,19 @@ public class DocumentService {
     }
 
     public void delete(Long docId) {
-        repository.delete(getEntity(docId));
+        DocumentEntity doc = getEntity(docId);
+        deleteVectors(docId);
+        repository.delete(doc);
         rawTextById.remove(docId);
+    }
+
+    /** Remove this document's chunks from the vector store (best-effort). */
+    private void deleteVectors(Long docId) {
+        try {
+            var b = new FilterExpressionBuilder();
+            vectorStore.delete(b.eq("doc_id", String.valueOf(docId)).build());
+        } catch (Exception ignored) {
+            // index may not exist yet (no docs processed); nothing to delete
+        }
     }
 }

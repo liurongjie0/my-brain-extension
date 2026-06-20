@@ -1,9 +1,13 @@
 package com.agentplatform.rag;
 
+import com.agentplatform.agent.AgentKnowledgeBaseRepository;
 import com.agentplatform.common.BusinessException;
 import com.agentplatform.rag.dto.KnowledgeBaseRequest;
 import com.agentplatform.rag.dto.KnowledgeBaseResponse;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -11,9 +15,18 @@ import java.util.List;
 public class KnowledgeBaseService {
 
     private final KnowledgeBaseRepository repository;
+    private final DocumentRepository documentRepository;
+    private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
+    private final VectorStore vectorStore;
 
-    public KnowledgeBaseService(KnowledgeBaseRepository repository) {
+    public KnowledgeBaseService(KnowledgeBaseRepository repository,
+                                DocumentRepository documentRepository,
+                                AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
+                                VectorStore vectorStore) {
         this.repository = repository;
+        this.documentRepository = documentRepository;
+        this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
+        this.vectorStore = vectorStore;
     }
 
     public KnowledgeBaseResponse create(KnowledgeBaseRequest req) {
@@ -39,7 +52,22 @@ public class KnowledgeBaseService {
         return KnowledgeBaseResponse.from(getEntity(id));
     }
 
+    /** Delete a KB and everything attached: vectors, document rows, and agent bindings. */
+    @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        KnowledgeBaseEntity kb = getEntity(id);
+        deleteVectors(id);
+        documentRepository.deleteByKbId(id);
+        agentKnowledgeBaseRepository.deleteByKbId(id);
+        repository.delete(kb);
+    }
+
+    private void deleteVectors(Long kbId) {
+        try {
+            var b = new FilterExpressionBuilder();
+            vectorStore.delete(b.eq("kb_id", String.valueOf(kbId)).build());
+        } catch (Exception ignored) {
+            // index may not exist yet; nothing to delete
+        }
     }
 }
