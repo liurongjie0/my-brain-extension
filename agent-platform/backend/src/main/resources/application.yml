@@ -4,10 +4,18 @@ server:
 spring:
   application:
     name: agent-platform
+  autoconfigure:
+    # 用自定义 RedisVectorStore bean(声明 kb_id 过滤字段), 排除其自动配置避免 bean 冲突
+    exclude:
+      - org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/agent_platform?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:agent}
     password: ${DB_PASSWORD:agent123}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   jpa:
     hibernate:
       ddl-auto: none
