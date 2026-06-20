@@ -1,0 +1,14 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <!-- 静默 docker-java / testcontainers 的底层 wire 噪音 -->
+    <logger name="com.github.dockerjava" level="WARN"/>
+    <logger name="org.testcontainers.shaded" level="WARN"/>
+    <logger name="org.testcontainers" level="INFO"/>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
