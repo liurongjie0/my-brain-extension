@@ -34,4 +34,14 @@ class AgentControllerTest extends IntegrationTestBase {
            .andExpect(status().isOk())
            .andExpect(jsonPath("$.data[?(@.name=='公开助手')]").exists());
     }
+
+    @Test
+    void create_without_required_fields_returns_400() throws Exception {
+        String body = om.writeValueAsString(new java.util.HashMap<>() {{
+            put("description", "缺少 name 与 model");
+        }});
+        mvc.perform(post("/api/admin/agents").contentType(MediaType.APPLICATION_JSON).content(body))
+           .andExpect(status().isBadRequest())
+           .andExpect(jsonPath("$.code").value(40000));
+    }
 }

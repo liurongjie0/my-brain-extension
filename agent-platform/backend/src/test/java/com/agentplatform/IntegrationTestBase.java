@@ -47,5 +47,7 @@ public abstract class IntegrationTestBase {
         registry.add("spring.ai.openai.api-key", () -> "test-key");
         // 测试中关闭上传后自动处理，由测试显式调用 process 保证确定性
         registry.add("rag.auto-process", () -> "false");
+        // 测试里的工具指向本机端口，放开内网访问
+        registry.add("tool.allow-private-network", () -> "true");
     }
 }

@@ -15,9 +15,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void generic_exception_maps_to_500() {
-        ApiResponse<Void> r = handler.handle(new RuntimeException("boom"));
+    void generic_exception_maps_to_sanitized_500() {
+        ApiResponse<Void> r = handler.handle(new RuntimeException("boom with sql details"));
         assertThat(r.code()).isEqualTo(500);
-        assertThat(r.message()).isEqualTo("boom");
+        // internal detail must not leak
+        assertThat(r.message()).doesNotContain("sql");
+        assertThat(r.message()).isEqualTo("服务器内部错误，请稍后重试");
     }
 }

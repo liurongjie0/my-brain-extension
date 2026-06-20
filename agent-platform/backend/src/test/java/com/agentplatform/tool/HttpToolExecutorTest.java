@@ -36,11 +36,31 @@ class HttpToolExecutorTest {
 
     @Test
     void posts_args_as_json_body() {
-        HttpToolExecutor executor = new HttpToolExecutor(new ObjectMapper());
+        HttpToolExecutor executor = new HttpToolExecutor(new ObjectMapper(), true);
         ToolEntity tool = new ToolEntity();
         tool.setMethod("POST");
         tool.setUrl("http://localhost:" + port + "/echo");
         String result = executor.execute(tool, "{\"city\":\"上海\"}");
         assertThat(result).contains("received").contains("上海");
+    }
+
+    @Test
+    void blocks_internal_address_when_private_network_disallowed() {
+        HttpToolExecutor executor = new HttpToolExecutor(new ObjectMapper(), false);
+        ToolEntity tool = new ToolEntity();
+        tool.setMethod("POST");
+        tool.setUrl("http://localhost:" + port + "/echo");
+        String result = executor.execute(tool, "{}");
+        assertThat(result).contains("error").contains("blocked");
+    }
+
+    @Test
+    void blocks_cloud_metadata_address() {
+        HttpToolExecutor executor = new HttpToolExecutor(new ObjectMapper(), false);
+        ToolEntity tool = new ToolEntity();
+        tool.setMethod("GET");
+        tool.setUrl("http://169.254.169.254/latest/meta-data/");
+        String result = executor.execute(tool, "{}");
+        assertThat(result).contains("blocked");
     }
 }
