@@ -56,10 +56,15 @@ npm run dev     # http://localhost:5173 ，Vite 代理 /api 到 8080
 
 浏览器打开 `http://localhost:5173`：
 - `/chat` 用户对话端：选 Agent、流式对话、ReAct 执行过程折叠、RAG 引用
-- `/admin/agents` 管理 Agent（提示词/模型/类型/绑定知识库与工具/启用）
+- `/admin/agents` 管理 Agent（提示词/模型端点/类型/绑定知识库·工具·MCP/启用）
+- `/admin/models` 模型管理（多端点：每个模型独立 base-url/key/模型名，Agent 可分别选用）
 - `/admin/knowledge` 知识库与文档上传、检索测试
 - `/admin/tools` HTTP 工具配置与测试
+- `/admin/mcp` MCP server 管理（SSE 传输，连接拉取工具，绑定给 Agent 调用）
+- `/admin/monitor` 监控（工具成功率、各 Agent 调用次数、平台总览）
 - `/admin/conversations` 会话审计
+
+> MCP：当前支持 SSE 传输；真实工具调用需要一个在运行的 MCP server（在「连接测试」里验证连通与工具列表）。stdio 传输已预留字段，待支持。
 
 ## 监控 / 可观测性
 
