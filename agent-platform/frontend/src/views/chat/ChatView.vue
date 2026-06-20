@@ -46,8 +46,10 @@ async function send() {
   const text = input.value.trim()
   input.value = ''
   messages.value.push({ role: 'user', content: text, steps: [] })
-  const assistant = { role: 'assistant', content: '', steps: [], sources: [], error: '' }
-  messages.value.push(assistant)
+  messages.value.push({ role: 'assistant', content: '', steps: [], sources: [], error: '' })
+  // mutate through the reactive array element (the proxy), not a raw object reference,
+  // otherwise per-token updates don't trigger re-render and only show up at the end
+  const assistant = messages.value[messages.value.length - 1]
   sending.value = true
   scrollToBottom()
   const pick = (data) => {
