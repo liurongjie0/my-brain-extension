@@ -24,6 +24,17 @@ export async function streamChat(body, { onEvent, onError, onDone }) {
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify(body)
     })
+    // server may answer with a JSON error (e.g. agent disabled / validation) instead of a stream
+    const contentType = resp.headers.get('content-type') || ''
+    if (!resp.ok || !contentType.includes('text/event-stream')) {
+      let message = `请求失败 (${resp.status})`
+      try {
+        const j = await resp.json()
+        if (j && j.message) message = j.message
+      } catch (_) {}
+      onError && onError(new Error(message))
+      return
+    }
     const reader = resp.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''

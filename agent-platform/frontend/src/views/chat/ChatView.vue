@@ -46,10 +46,13 @@ async function send() {
   const text = input.value.trim()
   input.value = ''
   messages.value.push({ role: 'user', content: text, steps: [] })
-  const assistant = { role: 'assistant', content: '', steps: [] }
+  const assistant = { role: 'assistant', content: '', steps: [], sources: [], error: '' }
   messages.value.push(assistant)
   sending.value = true
   scrollToBottom()
+  const pick = (data) => {
+    try { return JSON.parse(data).content || '' } catch (_) { return data }
+  }
   await streamChat(
     { agentId: currentAgent.value.id, conversationId: conversationId.value, message: text, userId },
     {
@@ -57,13 +60,17 @@ async function send() {
         if (e.event === 'meta') {
           try { conversationId.value = JSON.parse(e.data).conversationId } catch (_) {}
         } else if (e.event === 'token') {
-          try { assistant.content += JSON.parse(e.data).content || '' } catch (_) { assistant.content += e.data }
+          assistant.content += pick(e.data)
         } else if (e.event === 'step') {
-          try { assistant.steps.push(JSON.parse(e.data).content || '') } catch (_) { assistant.steps.push(e.data) }
+          assistant.steps.push(pick(e.data))
+        } else if (e.event === 'source') {
+          assistant.sources.push(pick(e.data))
+        } else if (e.event === 'error') {
+          assistant.error = pick(e.data)
         }
         scrollToBottom()
       },
-      onError: () => { assistant.content += '\n[连接出错，请重试]'; sending.value = false },
+      onError: (err) => { assistant.error = err.message || '连接出错，请重试'; sending.value = false },
       onDone: () => { sending.value = false; loadConversations(); scrollToBottom() }
     }
   )
@@ -134,7 +141,12 @@ onMounted(() => { loadAgents(); loadConversations() })
                 </el-collapse-item>
               </el-collapse>
             </div>
-            <div class="text">{{ m.content || (m.role === 'assistant' && sending ? '思考中…' : '') }}</div>
+            <div class="text">{{ m.content || (m.role === 'assistant' && sending && !m.error ? '思考中…' : '') }}</div>
+            <div v-if="m.error" class="err">{{ m.error }}</div>
+            <div v-if="m.sources && m.sources.length" class="sources">
+              <div class="sources-title">引用来源 · {{ m.sources.length }}</div>
+              <div v-for="(s, si) in m.sources" :key="si" class="source">{{ s }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -280,6 +292,25 @@ onMounted(() => { loadAgents(); loadConversations() })
   font-size: 12.5px; color: var(--ink-soft); line-height: 1.6;
   padding: 8px 10px; margin: 4px 0; border-left: 2px solid var(--clay);
   background: var(--surface-2); border-radius: 0 8px 8px 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+.err {
+  margin-top: 8px; font-size: 13px; color: #a8442f;
+  background: #fbeae5; border: 1px solid #f0cabb;
+  padding: 8px 12px; border-radius: 8px;
+}
+.sources {
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line);
+}
+.sources-title {
+  font-size: 11.5px; letter-spacing: 0.06em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.source {
+  font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
+  padding: 6px 10px; margin: 4px 0;
+  background: var(--sage-tint); border-radius: 8px;
+  border-left: 2px solid var(--sage);
   white-space: pre-wrap; word-break: break-word;
 }
 

@@ -1,26 +1,45 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '../../api/index.js'
 import { ElMessage } from 'element-plus'
 
 const list = ref([]); const dialog = ref(false); const form = ref({})
 const docDialog = ref(false); const currentKb = ref(null); const docs = ref([])
 const retrieveQuery = ref(''); const retrieveResults = ref([])
+let pollTimer = null
 
 async function load() { list.value = await api.adminKbs.list() }
 function create() { form.value = {}; dialog.value = true }
 async function save() { await api.adminKbs.create(form.value); dialog.value = false; ElMessage.success('已创建'); load() }
-async function remove(row) { await api.adminKbs.remove(row.id); load() }
+async function remove(row) { await api.adminKbs.remove(row.id); ElMessage.success('已删除'); load() }
+
 async function openDocs(row) {
   currentKb.value = row; docDialog.value = true; retrieveResults.value = []
-  docs.value = await api.adminKbs.listDocs(row.id)
+  await refreshDocs()
+  startPolling()
 }
-async function refreshDocs() { docs.value = await api.adminKbs.listDocs(currentKb.value.id) }
+async function refreshDocs() {
+  if (!currentKb.value) return
+  docs.value = await api.adminKbs.listDocs(currentKb.value.id)
+}
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    await refreshDocs()
+    const busy = docs.value.some((d) => d.status === 'pending' || d.status === 'processing')
+    if (!busy) stopPolling()
+  }, 2000)
+}
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
+
 const uploadUrl = (id) => api.adminKbs.uploadUrl(id)
-function onUploaded() { ElMessage.success('已上传，正在处理'); setTimeout(refreshDocs, 1500) }
+function onUploaded() { ElMessage.success('已上传，正在处理'); refreshDocs(); startPolling() }
 async function runRetrieve() {
   retrieveResults.value = await api.adminKbs.retrieve(currentKb.value.id, retrieveQuery.value, 3)
 }
+
+watch(docDialog, (open) => { if (!open) stopPolling() })
+onUnmounted(stopPolling)
 onMounted(load)
 </script>
 
@@ -40,7 +59,9 @@ onMounted(load)
       <el-table-column label="操作" width="200">
         <template #default="{ row }">
           <el-button size="small" @click="openDocs(row)">文档/检索</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          <el-popconfirm title="删除知识库会一并清除文档与向量，确定？" width="240" confirm-button-text="删除" cancel-button-text="取消" @confirm="remove(row)">
+            <template #reference><el-button size="small" type="danger">删除</el-button></template>
+          </el-popconfirm>
         </template>
       </el-table-column>
     </el-table>
@@ -60,7 +81,14 @@ onMounted(load)
       <el-button style="margin-left:8px" @click="refreshDocs">刷新状态</el-button>
       <el-table :data="docs" style="margin-top:12px">
         <el-table-column prop="filename" label="文件" />
-        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              :type="row.status === 'done' ? 'success' : row.status === 'failed' ? 'danger' : 'info'"
+            >{{ { pending: '待处理', processing: '处理中', done: '完成', failed: '失败' }[row.status] || row.status }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="chunkCount" label="切片数" width="80" />
       </el-table>
       <el-divider>检索测试</el-divider>

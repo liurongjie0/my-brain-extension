@@ -38,7 +38,9 @@ onMounted(load)
         <template #default="{ row }">
           <el-button size="small" @click="edit(row)">编辑</el-button>
           <el-button size="small" @click="openTest(row)">测试</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          <el-popconfirm title="确定删除该工具？" confirm-button-text="删除" cancel-button-text="取消" @confirm="remove(row)">
+            <template #reference><el-button size="small" type="danger">删除</el-button></template>
+          </el-popconfirm>
         </template>
       </el-table-column>
     </el-table>
