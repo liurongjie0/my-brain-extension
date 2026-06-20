@@ -4,6 +4,8 @@ import com.agentplatform.agent.AgentEntity;
 import com.agentplatform.agent.AgentKnowledgeBaseEntity;
 import com.agentplatform.agent.AgentKnowledgeBaseRepository;
 import com.agentplatform.agent.AgentRepository;
+import com.agentplatform.agent.AgentToolEntity;
+import com.agentplatform.agent.AgentToolRepository;
 import com.agentplatform.chat.ConversationEntity;
 import com.agentplatform.chat.ConversationRepository;
 import com.agentplatform.chat.MessageEntity;
@@ -11,6 +13,8 @@ import com.agentplatform.chat.MessageRepository;
 import com.agentplatform.common.BusinessException;
 import com.agentplatform.rag.RagRetriever;
 import com.agentplatform.rag.dto.RetrieveResult;
+import com.agentplatform.tool.ToolCallbackFactory;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -38,16 +42,21 @@ public class ChatOrchestrator {
     private final MessageRepository messages;
     private final AgentKnowledgeBaseRepository bindings;
     private final RagRetriever retriever;
+    private final AgentToolRepository agentTools;
+    private final ToolCallbackFactory toolCallbackFactory;
 
     public ChatOrchestrator(ChatModel chatModel, AgentRepository agents,
                             ConversationRepository conversations, MessageRepository messages,
-                            AgentKnowledgeBaseRepository bindings, RagRetriever retriever) {
+                            AgentKnowledgeBaseRepository bindings, RagRetriever retriever,
+                            AgentToolRepository agentTools, ToolCallbackFactory toolCallbackFactory) {
         this.chatModel = chatModel;
         this.agents = agents;
         this.conversations = conversations;
         this.messages = messages;
         this.bindings = bindings;
         this.retriever = retriever;
+        this.agentTools = agentTools;
+        this.toolCallbackFactory = toolCallbackFactory;
     }
 
     public Flux<ChatChunk> chat(Long agentId, Long conversationId, String userMessage, String userId) {
@@ -124,13 +133,19 @@ public class ChatOrchestrator {
             }
         }
 
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
+        List<Long> toolIds = agentTools.findByAgentId(agent.getId()).stream()
+                .map(AgentToolEntity::getToolId).toList();
+        List<ToolCallback> toolCallbacks = toolCallbackFactory.build(toolIds);
+
+        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
                 .model(agent.getModel())
                 .temperature(agent.getTemperature())
                 .maxTokens(agent.getMaxTokens())
-                .topP(agent.getTopP())
-                .build();
-        return new Prompt(msgs, options);
+                .topP(agent.getTopP());
+        if (!toolCallbacks.isEmpty()) {
+            optionsBuilder.toolCallbacks(toolCallbacks);
+        }
+        return new Prompt(msgs, optionsBuilder.build());
     }
 
     private void saveMessage(Long convId, String role, String content) {

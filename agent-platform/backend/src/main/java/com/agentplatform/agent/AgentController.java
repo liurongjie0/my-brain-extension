@@ -12,11 +12,14 @@ public class AgentController {
 
     private final AgentService service;
     private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
+    private final AgentToolRepository agentToolRepository;
 
     public AgentController(AgentService service,
-                          AgentKnowledgeBaseRepository agentKnowledgeBaseRepository) {
+                          AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
+                          AgentToolRepository agentToolRepository) {
         this.service = service;
         this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
+        this.agentToolRepository = agentToolRepository;
     }
 
     @PostMapping("/api/admin/agents")
@@ -50,7 +53,7 @@ public class AgentController {
         return ApiResponse.ok(service.listEnabled());
     }
 
-    public record BindingsRequest(List<Long> kbIds) {}
+    public record BindingsRequest(List<Long> kbIds, List<Long> toolIds) {}
 
     @PutMapping("/api/admin/agents/{id}/bindings")
     public ApiResponse<Void> bindings(@PathVariable Long id, @RequestBody BindingsRequest req) {
@@ -59,6 +62,12 @@ public class AgentController {
         if (req.kbIds() != null) {
             for (Long kbId : req.kbIds()) {
                 agentKnowledgeBaseRepository.save(new AgentKnowledgeBaseEntity(id, kbId));
+            }
+        }
+        agentToolRepository.deleteByAgentId(id);
+        if (req.toolIds() != null) {
+            for (Long toolId : req.toolIds()) {
+                agentToolRepository.save(new AgentToolEntity(id, toolId));
             }
         }
         return ApiResponse.ok(null);
