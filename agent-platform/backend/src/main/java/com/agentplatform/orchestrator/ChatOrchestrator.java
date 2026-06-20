@@ -10,6 +10,7 @@ import com.agentplatform.chat.ConversationEntity;
 import com.agentplatform.chat.ConversationRepository;
 import com.agentplatform.chat.MessageEntity;
 import com.agentplatform.chat.MessageRepository;
+import com.agentplatform.chat.MessageRole;
 import com.agentplatform.common.BusinessException;
 import com.agentplatform.rag.RagRetriever;
 import com.agentplatform.rag.dto.RetrieveResult;
@@ -20,6 +21,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -35,17 +37,20 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Orchestrates a chat turn. Non-react agents stream the response with the framework's
  * internal tool execution; react agents run a manual tool-calling loop that surfaces each
- * step over SSE and persists the full trajectory. RAG context is injected for any agent
- * bound to knowledge bases.
+ * step incrementally over SSE and persists the full trajectory. RAG context is injected for
+ * any agent bound to knowledge bases, and the retrieved sources are surfaced to the client.
  */
 @Service
 public class ChatOrchestrator {
 
     private static final int MAX_STEPS = 8;
+    private static final int RAG_TOP_K = 4;
+    private static final String AGENT_TYPE_REACT = "react";
 
     private final ChatModel chatModel;
     private final AgentRepository agents;
@@ -84,101 +89,129 @@ public class ChatOrchestrator {
 
         ConversationEntity conv = resolveConversation(agentId, conversationId, userId, userMessage);
         Long convId = conv.getId();
-        saveMessage(convId, "user", userMessage, null);
+        saveMessage(convId, MessageRole.USER, userMessage, null, null);
 
-        List<Message> baseMessages = buildMessages(agent, convId, userMessage);
+        BuiltContext ctx = buildContext(agent, convId, userMessage);
         List<Long> toolIds = agentTools.findByAgentId(agent.getId()).stream()
                 .map(AgentToolEntity::getToolId).toList();
         List<ToolCallback> toolCallbacks = toolCallbackFactory.build(toolIds);
 
-        if ("react".equals(agent.getAgentType()) && !toolCallbacks.isEmpty()) {
-            return reactChat(agent, convId, baseMessages, toolCallbacks);
+        if (AGENT_TYPE_REACT.equals(agent.getAgentType()) && !toolCallbacks.isEmpty()) {
+            return reactChat(agent, convId, ctx, toolCallbacks);
         }
-        return streamChat(agent, convId, baseMessages, toolCallbacks);
+        return streamChat(agent, convId, ctx, toolCallbacks);
     }
 
     // ===== streaming path (chat / rag / tool, framework internal tool execution) =====
 
     private Flux<ChatChunk> streamChat(AgentEntity agent, Long convId,
-                                       List<Message> baseMessages, List<ToolCallback> toolCallbacks) {
+                                       BuiltContext ctx, List<ToolCallback> toolCallbacks) {
         OpenAiChatOptions.Builder ob = baseOptions(agent);
         if (!toolCallbacks.isEmpty()) {
             ob.toolCallbacks(toolCallbacks);
         }
-        Prompt prompt = new Prompt(baseMessages, ob.build());
+        Prompt prompt = new Prompt(ctx.messages(), ob.build());
 
         StringBuilder full = new StringBuilder();
-        Flux<ChatChunk> meta = Flux.just(new ChatChunk(convId, "meta", null));
+        AtomicInteger tokenUsage = new AtomicInteger(0);
+
+        Flux<ChatChunk> head = Flux.fromIterable(headChunks(convId, ctx.sources()));
         Flux<ChatChunk> tokens = chatModel.stream(prompt)
+                .doOnNext(resp -> captureUsage(resp, tokenUsage))
                 .map(resp -> {
                     String text = resp.getResult().getOutput().getText();
                     return text != null ? text : "";
                 })
                 .filter(s -> !s.isEmpty())
                 .doOnNext(full::append)
-                .map(s -> new ChatChunk(convId, "token", s));
+                .map(s -> new ChatChunk(convId, ChatEvents.TOKEN, s));
         Flux<ChatChunk> done = Flux.defer(() -> {
-            saveMessage(convId, "assistant", full.toString(), null);
-            return Flux.just(new ChatChunk(convId, "done", null));
+            persistAssistant(convId, full.toString(), null, tokenUsage.get());
+            return Flux.just(new ChatChunk(convId, ChatEvents.DONE, null));
         });
-        return Flux.concat(meta, tokens, done);
+
+        return Flux.concat(head, tokens, done)
+                .onErrorResume(err -> {
+                    // persist whatever streamed so the turn isn't lost, then surface the error
+                    persistAssistant(convId, full.toString(), null, tokenUsage.get());
+                    return Flux.just(new ChatChunk(convId, ChatEvents.ERROR, friendly(err)));
+                });
     }
 
-    // ===== react path (manual tool-calling loop, step events + trajectory) =====
+    // ===== react path (manual tool-calling loop, incremental step events + trajectory) =====
 
     private Flux<ChatChunk> reactChat(AgentEntity agent, Long convId,
-                                      List<Message> baseMessages, List<ToolCallback> toolCallbacks) {
-        return Flux.defer(() -> {
-            List<ChatChunk> out = new ArrayList<>();
-            out.add(new ChatChunk(convId, "meta", null));
+                                      BuiltContext ctx, List<ToolCallback> toolCallbacks) {
+        return Flux.create(sink -> {
+            StringBuilder finalText = new StringBuilder();
             List<Map<String, Object>> trajectory = new ArrayList<>();
-
-            OpenAiChatOptions options = baseOptions(agent)
-                    .toolCallbacks(toolCallbacks)
-                    .internalToolExecutionEnabled(false)
-                    .build();
-
-            Prompt prompt = new Prompt(new ArrayList<>(baseMessages), options);
-            ChatResponse response = chatModel.call(prompt);
-            int steps = 0;
-
-            while (response.hasToolCalls() && steps < MAX_STEPS) {
-                List<AssistantMessage.ToolCall> calls = response.getResult().getOutput().getToolCalls();
-                ToolExecutionResult execResult = toolCallingManager.executeToolCalls(prompt, response);
-                Map<String, String> resultsById = extractToolResults(execResult);
-
-                for (AssistantMessage.ToolCall call : calls) {
-                    String result = resultsById.getOrDefault(call.id(), "");
-                    String shortResult = result.length() > 300 ? result.substring(0, 300) : result;
-                    out.add(new ChatChunk(convId, "step",
-                            "调用 " + call.name() + "(" + call.arguments() + ") => " + shortResult));
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("tool", call.name());
-                    entry.put("args", call.arguments());
-                    entry.put("result", shortResult);
-                    trajectory.add(entry);
+            try {
+                sink.next(new ChatChunk(convId, ChatEvents.META, null));
+                for (ChatChunk s : sourceChunks(convId, ctx.sources())) {
+                    sink.next(s);
                 }
 
-                prompt = new Prompt(execResult.conversationHistory(), options);
-                response = chatModel.call(prompt);
-                steps++;
-            }
+                OpenAiChatOptions options = baseOptions(agent)
+                        .toolCallbacks(toolCallbacks)
+                        .internalToolExecutionEnabled(false)
+                        .build();
 
-            String finalText = response.getResult().getOutput().getText();
-            if (finalText == null) finalText = "";
-            out.add(new ChatChunk(convId, "token", finalText));
+                Prompt prompt = new Prompt(new ArrayList<>(ctx.messages()), options);
+                ChatResponse response = chatModel.call(prompt);
+                int steps = 0;
 
-            String trajectoryJson;
-            try {
-                trajectoryJson = objectMapper.writeValueAsString(trajectory);
+                while (response.hasToolCalls() && steps < MAX_STEPS) {
+                    List<AssistantMessage.ToolCall> calls = response.getResult().getOutput().getToolCalls();
+                    ToolExecutionResult execResult = toolCallingManager.executeToolCalls(prompt, response);
+                    Map<String, String> resultsById = extractToolResults(execResult);
+
+                    for (AssistantMessage.ToolCall call : calls) {
+                        String result = resultsById.getOrDefault(call.id(), "");
+                        String shortResult = truncate(result, 300);
+                        sink.next(new ChatChunk(convId, ChatEvents.STEP,
+                                "调用 " + call.name() + "(" + call.arguments() + ") => " + shortResult));
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("tool", call.name());
+                        entry.put("args", call.arguments());
+                        entry.put("result", shortResult);
+                        trajectory.add(entry);
+                    }
+
+                    prompt = new Prompt(execResult.conversationHistory(), options);
+                    response = chatModel.call(prompt);
+                    steps++;
+                }
+
+                String text = response.getResult().getOutput().getText();
+                if (text != null) finalText.append(text);
+                sink.next(new ChatChunk(convId, ChatEvents.TOKEN, finalText.toString()));
+
+                persistAssistant(convId, finalText.toString(), toJson(trajectory), usageOf(response));
+                sink.next(new ChatChunk(convId, ChatEvents.DONE, null));
+                sink.complete();
             } catch (Exception e) {
-                trajectoryJson = "[]";
+                persistAssistant(convId, finalText.toString(), toJson(trajectory), null);
+                sink.next(new ChatChunk(convId, ChatEvents.ERROR, friendly(e)));
+                sink.complete();
             }
-            saveMessage(convId, "assistant", finalText, trajectoryJson);
-
-            out.add(new ChatChunk(convId, "done", null));
-            return Flux.fromIterable(out);
         });
+    }
+
+    // ===== helpers =====
+
+    private List<ChatChunk> headChunks(Long convId, List<RetrieveResult> sources) {
+        List<ChatChunk> head = new ArrayList<>();
+        head.add(new ChatChunk(convId, ChatEvents.META, null));
+        head.addAll(sourceChunks(convId, sources));
+        return head;
+    }
+
+    private List<ChatChunk> sourceChunks(Long convId, List<RetrieveResult> sources) {
+        List<ChatChunk> out = new ArrayList<>();
+        for (RetrieveResult s : sources) {
+            out.add(new ChatChunk(convId, ChatEvents.SOURCE, truncate(s.content(), 160)));
+        }
+        return out;
     }
 
     private Map<String, String> extractToolResults(ToolExecutionResult execResult) {
@@ -193,8 +226,6 @@ public class ChatOrchestrator {
         return byId;
     }
 
-    // ===== shared helpers =====
-
     private OpenAiChatOptions.Builder baseOptions(AgentEntity agent) {
         return OpenAiChatOptions.builder()
                 .model(agent.getModel())
@@ -203,24 +234,29 @@ public class ChatOrchestrator {
                 .topP(agent.getTopP());
     }
 
-    private List<Message> buildMessages(AgentEntity agent, Long convId, String userMessage) {
+    /** Built prompt messages plus the RAG sources used, so the client can show citations. */
+    private record BuiltContext(List<Message> messages, List<RetrieveResult> sources) {}
+
+    private BuiltContext buildContext(AgentEntity agent, Long convId, String userMessage) {
         List<Message> msgs = new ArrayList<>();
         if (agent.getSystemPrompt() != null && !agent.getSystemPrompt().isBlank()) {
             msgs.add(new SystemMessage(agent.getSystemPrompt()));
         }
         for (MessageEntity m : messages.findByConversationIdOrderByCreatedAtAsc(convId)) {
             switch (m.getRole()) {
-                case "user" -> msgs.add(new UserMessage(m.getContent()));
-                case "assistant" -> msgs.add(new AssistantMessage(m.getContent()));
-                case "system" -> msgs.add(new SystemMessage(m.getContent()));
+                case MessageRole.USER -> msgs.add(new UserMessage(m.getContent()));
+                case MessageRole.ASSISTANT -> msgs.add(new AssistantMessage(m.getContent()));
+                case MessageRole.SYSTEM -> msgs.add(new SystemMessage(m.getContent()));
                 default -> { }
             }
         }
+        List<RetrieveResult> sources = List.of();
         List<Long> kbIds = bindings.findByAgentId(agent.getId()).stream()
                 .map(AgentKnowledgeBaseEntity::getKbId).toList();
         if (!kbIds.isEmpty()) {
-            List<RetrieveResult> hits = retriever.retrieve(kbIds, userMessage, 4);
+            List<RetrieveResult> hits = retriever.retrieve(kbIds, userMessage, RAG_TOP_K);
             if (!hits.isEmpty()) {
+                sources = hits;
                 StringBuilder ctx = new StringBuilder("参考资料(请优先依据以下内容回答):\n");
                 for (RetrieveResult h : hits) {
                     ctx.append("- ").append(h.content()).append("\n");
@@ -228,7 +264,7 @@ public class ChatOrchestrator {
                 msgs.add(new SystemMessage(ctx.toString()));
             }
         }
-        return msgs;
+        return new BuiltContext(msgs, sources);
     }
 
     private ConversationEntity resolveConversation(Long agentId, Long conversationId,
@@ -240,16 +276,52 @@ public class ChatOrchestrator {
         ConversationEntity c = new ConversationEntity();
         c.setAgentId(agentId);
         c.setUserId(userId);
-        c.setTitle(userMessage.length() > 20 ? userMessage.substring(0, 20) : userMessage);
+        c.setTitle(truncate(userMessage, 20));
         return conversations.save(c);
     }
 
-    private void saveMessage(Long convId, String role, String content, String toolCallsJson) {
+    private void persistAssistant(Long convId, String content, String toolCallsJson, Integer tokenUsage) {
+        saveMessage(convId, MessageRole.ASSISTANT, content, toolCallsJson, tokenUsage);
+        conversations.touch(convId);
+    }
+
+    private void saveMessage(Long convId, String role, String content, String toolCallsJson, Integer tokenUsage) {
         MessageEntity m = new MessageEntity();
         m.setConversationId(convId);
         m.setRole(role);
         m.setContent(content);
         m.setToolCallsJson(toolCallsJson);
+        m.setTokenUsage(tokenUsage);
         messages.save(m);
+    }
+
+    private void captureUsage(ChatResponse resp, AtomicInteger holder) {
+        Integer total = usageOf(resp);
+        if (total != null) holder.set(total);
+    }
+
+    private Integer usageOf(ChatResponse resp) {
+        if (resp == null || resp.getMetadata() == null) return null;
+        Usage usage = resp.getMetadata().getUsage();
+        return usage != null ? usage.getTotalTokens() : null;
+    }
+
+    private String toJson(List<Map<String, Object>> trajectory) {
+        if (trajectory.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(trajectory);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    private String friendly(Throwable err) {
+        String msg = err.getMessage();
+        return "对话出错：" + (msg != null ? msg : err.getClass().getSimpleName());
     }
 }
