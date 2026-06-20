@@ -21,7 +21,12 @@
 - **Spring AI Alibaba BOM `1.0.0.2`**（仅计划 05 的 graph 用到）
 - **持久层**：Spring Data JPA + MySQL 8；**迁移**：Flyway
 - **前端**：Vue3 + Vite + Element Plus + Pinia
-- **测试**：JUnit5 + Mockito（单测，模型调用一律 mock）；Testcontainers（集成测试起 MySQL + Redis Stack）
+- **测试**：JUnit5 + Mockito（单测，模型调用一律 mock）；Testcontainers **2.0.5**（集成测试起 MySQL + Redis Stack）
+
+> **执行 01 时的实际经验（后续计划沿用）：**
+> - 本机 Docker Engine 为 29.x（最低 API 1.44），Spring Boot 默认管理的 Testcontainers 1.20.x 不兼容（`/info` 返回 400）。已在 `pom.xml` 用 `<testcontainers.version>2.0.5</testcontainers.version>` + 显式导入 `testcontainers-bom` 解决。注意 TC 2.x 模块坐标加了 `testcontainers-` 前缀（如 `testcontainers-junit-jupiter`、`testcontainers-mysql`）。
+> - `IntegrationTestBase` 采用**单例容器模式**（静态块 `start()`，全程共享），避免 Spring 上下文缓存与每类容器生命周期冲突。后续需要 Redis 的集成测试在此基类追加共享 redis-stack 容器即可。
+> - openjdk@17 为 keg-only：所有 `mvn`/`mvnw` 命令需带 `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`。
 - **配置**：敏感配置走环境变量/`.env`，沿用 hiking-bot 的 `.env.example` 标注风格
 - **代码注释/命名用英文，文档与提交信息用中文**（遵循 CLAUDE.md）
 
@@ -29,7 +34,7 @@
 
 为让后续计划吸收前面执行的实际经验，**逐份编写**：执行完计划 01 后再写 02，依此类推。本路线图随进展更新勾选状态。
 
-- [ ] 01 地基
+- [x] 01 地基（完成：7 测试全绿，分支 feat/agent-platform-foundation）
 - [ ] 02 Agent 配置 + 纯对话
 - [ ] 03 RAG
 - [ ] 04 工具
