@@ -11,9 +11,12 @@ import java.util.List;
 public class AgentController {
 
     private final AgentService service;
+    private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
 
-    public AgentController(AgentService service) {
+    public AgentController(AgentService service,
+                          AgentKnowledgeBaseRepository agentKnowledgeBaseRepository) {
         this.service = service;
+        this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
     }
 
     @PostMapping("/api/admin/agents")
@@ -45,5 +48,19 @@ public class AgentController {
     @GetMapping("/api/agents")
     public ApiResponse<List<AgentResponse>> listEnabled() {
         return ApiResponse.ok(service.listEnabled());
+    }
+
+    public record BindingsRequest(List<Long> kbIds) {}
+
+    @PutMapping("/api/admin/agents/{id}/bindings")
+    public ApiResponse<Void> bindings(@PathVariable Long id, @RequestBody BindingsRequest req) {
+        service.get(id); // validate agent exists
+        agentKnowledgeBaseRepository.deleteByAgentId(id);
+        if (req.kbIds() != null) {
+            for (Long kbId : req.kbIds()) {
+                agentKnowledgeBaseRepository.save(new AgentKnowledgeBaseEntity(id, kbId));
+            }
+        }
+        return ApiResponse.ok(null);
     }
 }
