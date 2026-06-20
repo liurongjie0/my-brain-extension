@@ -38,5 +38,5 @@
 - [x] 02 Agent 配置 + 纯对话（完成：15 测试全绿。经验：JPA 字段 `topP` 命名策略会错成 `topp`，NOT NULL 列需显式 `@Column`；ddl-auto 已改 none，靠存取往返测试保证映射）
 - [x] 03 RAG（完成：21 测试全绿。经验：自定义 vectorStore bean 需排除 `RedisVectorStoreAutoConfiguration` 避免 bean 同名冲突；测试用 FakeEmbeddingModel 避免向量库初始化触发 embedding 网络调用；`rag.auto-process=false` 关闭测试中的异步处理保证确定性）
 - [x] 04 工具（完成：25 测试全绿。HTTP 工具 + DynamicHttpToolCallback 适配 Spring AI ToolCallback，框架内置自动执行；Agent-工具绑定）
-- [ ] 05 多步骤 ReAct + 编排完善
+- [x] 05 多步骤 ReAct + 编排完善（完成：26 测试全绿。用 Spring AI 核心 ToolCallingManager 手动循环 + maxSteps=8 + step 事件 + 轨迹落库；未用 graph，等价达成）
 - [ ] 06 前端
