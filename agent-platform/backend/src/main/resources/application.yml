@@ -37,6 +37,25 @@ spring:
         options:
           model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: agent-platform
+    description: 内部 Agent 平台（RAG + 工具 + 多步骤）
+
 logging:
   level:
     org.springframework.ai: INFO
