@@ -21,9 +21,15 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="padding:16px">
-    <el-button type="primary" @click="create">新建工具</el-button>
-    <el-table :data="list" style="margin-top:12px">
+  <div class="page">
+    <div class="page-head head-row">
+      <div>
+        <h2>工具</h2>
+        <p>配置 HTTP 接口型工具，供 Agent 通过 Function Calling 调用。</p>
+      </div>
+      <el-button type="primary" @click="create">新建工具</el-button>
+    </div>
+    <el-table :data="list">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="method" label="方法" width="80" />

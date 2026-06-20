@@ -9,7 +9,11 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="padding:16px">
+  <div class="page">
+    <div class="page-head">
+      <h2>会话审计</h2>
+      <p>查看全部会话与完整消息轨迹（含工具调用）。</p>
+    </div>
     <el-table :data="list">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="title" label="标题" />

@@ -1,0 +1,194 @@
+/* ============================================================
+   Agent 平台 · 米白纸感主题 (cream paper + clay accent)
+   Loaded AFTER element-plus/dist/index.css so :root overrides win.
+   ============================================================ */
+
+:root {
+  /* brand tokens */
+  --canvas: #f7f4ee;
+  --surface: #fffdf9;
+  --surface-2: #fcf9f3;
+  --sand: #efeae0;
+  --sand-deep: #e6e0d3;
+  --ink: #2a2620;
+  --ink-soft: #6b6459;
+  --muted: #9a9286;
+  --line: #e8e2d6;
+  --line-soft: #f0ebe1;
+  --clay: #c2693f;
+  --clay-deep: #a4542e;
+  --clay-tint: #f6ece4;
+  --sage: #5f7a5a;
+  --sage-tint: #eef2ea;
+
+  /* element-plus theme overrides */
+  --el-color-primary: #c2693f;
+  --el-color-primary-dark-2: #a4542e;
+  --el-color-primary-light-3: #d08a66;
+  --el-color-primary-light-5: #dea888;
+  --el-color-primary-light-7: #ecc6b0;
+  --el-color-primary-light-8: #f2d8c8;
+  --el-color-primary-light-9: #f7e8de;
+
+  --el-color-success: #5f7a5a;
+  --el-color-danger: #b5523f;
+
+  --el-text-color-primary: #2a2620;
+  --el-text-color-regular: #4a443b;
+  --el-text-color-secondary: #8a8275;
+
+  --el-border-color: #e8e2d6;
+  --el-border-color-light: #efe9dd;
+  --el-border-color-lighter: #f2ede3;
+  --el-fill-color-blank: #fffdf9;
+  --el-bg-color: #fffdf9;
+  --el-bg-color-overlay: #fffdf9;
+
+  --el-border-radius-base: 10px;
+  --el-font-family: "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* brand wordmark — serif for a touch of paper character */
+.brand-serif {
+  font-family: "Songti SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
+}
+
+/* ---- cards: white surface, hairline border, whisper-soft shadow ---- */
+.el-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(60, 50, 38, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.el-card.is-hover-shadow:hover {
+  box-shadow: 0 6px 20px rgba(60, 50, 38, 0.08);
+  border-color: var(--sand-deep);
+}
+
+/* ---- buttons: calm, slightly pill ---- */
+.el-button {
+  border-radius: 9px;
+  font-weight: 500;
+}
+.el-button--primary {
+  --el-button-bg-color: var(--clay);
+  --el-button-border-color: var(--clay);
+  --el-button-hover-bg-color: var(--clay-deep);
+  --el-button-hover-border-color: var(--clay-deep);
+  --el-button-active-bg-color: var(--clay-deep);
+}
+.el-button--default {
+  --el-button-bg-color: var(--surface);
+  --el-button-border-color: var(--line);
+  --el-button-hover-bg-color: var(--surface-2);
+  --el-button-hover-border-color: var(--clay);
+  --el-button-hover-text-color: var(--clay-deep);
+}
+
+/* ---- inputs / textarea ---- */
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--clay) inset;
+}
+
+/* ---- tables: airy, hairline rows ---- */
+.el-table {
+  --el-table-border-color: var(--line);
+  --el-table-header-bg-color: var(--surface-2);
+  --el-table-header-text-color: var(--ink-soft);
+  --el-table-row-hover-bg-color: var(--clay-tint);
+  background: transparent;
+  border-radius: 12px;
+}
+.el-table th.el-table__cell {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---- dialogs ---- */
+.el-dialog {
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(40, 33, 24, 0.16);
+}
+.el-dialog__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ---- menu (sidebar) ---- */
+.el-menu {
+  border-right: none;
+  background: transparent;
+}
+
+/* ---- tags ---- */
+.el-tag {
+  border-radius: 7px;
+  font-weight: 500;
+}
+
+/* ---- shared page scaffold for admin views ---- */
+.page {
+  padding: 28px 32px;
+  max-width: 1180px;
+}
+.page-head {
+  margin-bottom: 20px;
+}
+.page-head.head-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.page-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.page-head p {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+/* thin warm scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--sand-deep);
+  border-radius: 10px;
+  border: 3px solid var(--canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d8d0bf;
+}

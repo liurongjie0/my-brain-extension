@@ -29,9 +29,15 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="padding:16px">
-    <el-button type="primary" @click="create">新建 Agent</el-button>
-    <el-table :data="list" style="margin-top:12px">
+  <div class="page">
+    <div class="page-head head-row">
+      <div>
+        <h2>Agent 管理</h2>
+        <p>配置提示词、模型与类型，绑定知识库和工具。</p>
+      </div>
+      <el-button type="primary" @click="create">新建 Agent</el-button>
+    </div>
+    <el-table :data="list">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="agentType" label="类型" width="90" />
