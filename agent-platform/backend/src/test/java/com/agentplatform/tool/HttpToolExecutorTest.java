@@ -40,8 +40,9 @@ class HttpToolExecutorTest {
         ToolEntity tool = new ToolEntity();
         tool.setMethod("POST");
         tool.setUrl("http://localhost:" + port + "/echo");
-        String result = executor.execute(tool, "{\"city\":\"上海\"}");
-        assertThat(result).contains("received").contains("上海");
+        HttpToolExecutor.Outcome result = executor.execute(tool, "{\"city\":\"上海\"}");
+        assertThat(result.ok()).isTrue();
+        assertThat(result.body()).contains("received").contains("上海");
     }
 
     @Test
@@ -50,8 +51,9 @@ class HttpToolExecutorTest {
         ToolEntity tool = new ToolEntity();
         tool.setMethod("POST");
         tool.setUrl("http://localhost:" + port + "/echo");
-        String result = executor.execute(tool, "{}");
-        assertThat(result).contains("error").contains("blocked");
+        HttpToolExecutor.Outcome result = executor.execute(tool, "{}");
+        assertThat(result.ok()).isFalse();
+        assertThat(result.body()).contains("error").contains("blocked");
     }
 
     @Test
@@ -60,7 +62,7 @@ class HttpToolExecutorTest {
         ToolEntity tool = new ToolEntity();
         tool.setMethod("GET");
         tool.setUrl("http://169.254.169.254/latest/meta-data/");
-        String result = executor.execute(tool, "{}");
-        assertThat(result).contains("blocked");
+        HttpToolExecutor.Outcome result = executor.execute(tool, "{}");
+        assertThat(result.body()).contains("blocked");
     }
 }

@@ -49,6 +49,6 @@ public class ToolController {
 
     @PostMapping("/{id}/test")
     public ApiResponse<String> test(@PathVariable Long id, @RequestBody TestRequest req) {
-        return ApiResponse.ok(executor.execute(service.getEntity(id), req.args()));
+        return ApiResponse.ok(executor.execute(service.getEntity(id), req.args()).body());
     }
 }

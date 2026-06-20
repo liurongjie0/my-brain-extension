@@ -29,14 +29,17 @@ public class HttpToolExecutor {
         this.allowPrivateNetwork = allowPrivateNetwork;
     }
 
-    public String execute(ToolEntity tool, String argsJson) {
+    /** Result of a tool invocation: the response body plus whether it succeeded. */
+    public record Outcome(String body, boolean ok) {}
+
+    public Outcome execute(ToolEntity tool, String argsJson) {
         try {
             String method = tool.getMethod() != null ? tool.getMethod().toUpperCase() : "POST";
             String url = tool.getUrl();
 
             String blocked = checkSsrf(url);
             if (blocked != null) {
-                return "{\"error\":\"" + blocked + "\"}";
+                return new Outcome("{\"error\":\"" + blocked + "\"}", false);
             }
 
             HttpRequest.Builder builder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(30));
@@ -56,9 +59,10 @@ public class HttpToolExecutor {
             HttpResponse<String> resp = client.send(builder.build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             String body = resp.body();
-            return body.length() > 8192 ? body.substring(0, 8192) : body;
+            if (body.length() > 8192) body = body.substring(0, 8192);
+            return new Outcome(body, resp.statusCode() >= 200 && resp.statusCode() < 400);
         } catch (Exception e) {
-            return "{\"error\":\"" + e.getMessage() + "\"}";
+            return new Outcome("{\"error\":\"" + e.getMessage() + "\"}", false);
         }
     }
 
