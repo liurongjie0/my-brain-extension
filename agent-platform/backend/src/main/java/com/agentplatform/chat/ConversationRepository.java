@@ -6,4 +6,6 @@ import java.util.List;
 
 public interface ConversationRepository extends JpaRepository<ConversationEntity, Long> {
     List<ConversationEntity> findByUserIdOrderByUpdatedAtDesc(String userId);
+
+    List<ConversationEntity> findAllByOrderByUpdatedAtDesc();
 }

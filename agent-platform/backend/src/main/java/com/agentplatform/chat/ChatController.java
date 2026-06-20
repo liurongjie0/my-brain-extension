@@ -50,4 +50,15 @@ public class ChatController {
                 .stream().map(MessageResponse::from).toList();
         return ApiResponse.ok(list);
     }
+
+    @GetMapping("/api/admin/conversations")
+    public ApiResponse<List<ConversationResponse>> allConversations() {
+        return ApiResponse.ok(conversations.findAllByOrderByUpdatedAtDesc()
+                .stream().map(ConversationResponse::from).toList());
+    }
+
+    @GetMapping("/api/admin/conversations/{id}/messages")
+    public ApiResponse<List<MessageResponse>> adminHistory(@PathVariable Long id) {
+        return history(id);
+    }
 }
