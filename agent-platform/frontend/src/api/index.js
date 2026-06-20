@@ -31,5 +31,19 @@ export const api = {
   adminConversations: {
     list: () => http.get('/api/admin/conversations'),
     messages: (id) => http.get(`/api/admin/conversations/${id}/messages`)
-  }
+  },
+  adminModels: {
+    list: () => http.get('/api/admin/model-configs'),
+    create: (data) => http.post('/api/admin/model-configs', data),
+    update: (id, data) => http.put(`/api/admin/model-configs/${id}`, data),
+    remove: (id) => http.delete(`/api/admin/model-configs/${id}`)
+  },
+  adminMcp: {
+    list: () => http.get('/api/admin/mcp-servers'),
+    create: (data) => http.post('/api/admin/mcp-servers', data),
+    update: (id, data) => http.put(`/api/admin/mcp-servers/${id}`, data),
+    remove: (id) => http.delete(`/api/admin/mcp-servers/${id}`),
+    test: (id) => http.post(`/api/admin/mcp-servers/${id}/test`)
+  },
+  metrics: () => http.get('/api/admin/metrics')
 }

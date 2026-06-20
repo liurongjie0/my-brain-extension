@@ -24,8 +24,11 @@ const route = useRoute()
         <div class="nav-label">管理</div>
         <el-menu :default-active="route.path" router class="rail-menu">
           <el-menu-item index="/admin/agents"><span class="dot" />Agent</el-menu-item>
+          <el-menu-item index="/admin/models"><span class="dot" />模型</el-menu-item>
           <el-menu-item index="/admin/knowledge"><span class="dot" />知识库</el-menu-item>
           <el-menu-item index="/admin/tools"><span class="dot" />工具</el-menu-item>
+          <el-menu-item index="/admin/mcp"><span class="dot" />MCP</el-menu-item>
+          <el-menu-item index="/admin/monitor"><span class="dot" />监控</el-menu-item>
           <el-menu-item index="/admin/conversations"><span class="dot" />会话审计</el-menu-item>
         </el-menu>
       </div>

@@ -3,14 +3,16 @@ import { ref, onMounted } from 'vue'
 import { api } from '../../api/index.js'
 import { ElMessage } from 'element-plus'
 
-const list = ref([]); const kbs = ref([]); const tools = ref([])
+const list = ref([]); const kbs = ref([]); const tools = ref([]); const models = ref([]); const mcps = ref([])
 const dialog = ref(false); const bindDialog = ref(false)
-const form = ref({}); const bindForm = ref({ id: null, kbIds: [], toolIds: [] })
+const form = ref({}); const bindForm = ref({ id: null, kbIds: [], toolIds: [], mcpIds: [] })
 
 async function load() {
   list.value = await api.adminAgents.list()
   kbs.value = await api.adminKbs.list()
   tools.value = await api.adminTools.list()
+  models.value = await api.adminModels.list()
+  mcps.value = await api.adminMcp.list()
 }
 function create() { form.value = { agentType: 'chat', temperature: 0.7, maxTokens: 2048, topP: 1.0, enabled: true }; dialog.value = true }
 function edit(row) { form.value = { ...row }; dialog.value = true }
@@ -19,10 +21,12 @@ async function save() {
   else await api.adminAgents.create(form.value)
   dialog.value = false; ElMessage.success('已保存'); load()
 }
-async function remove(row) { await api.adminAgents.remove(row.id); load() }
-function openBind(row) { bindForm.value = { id: row.id, kbIds: [], toolIds: [] }; bindDialog.value = true }
+async function remove(row) { await api.adminAgents.remove(row.id); ElMessage.success('已删除'); load() }
+function openBind(row) { bindForm.value = { id: row.id, kbIds: [], toolIds: [], mcpIds: [] }; bindDialog.value = true }
 async function saveBind() {
-  await api.adminAgents.bindings(bindForm.value.id, { kbIds: bindForm.value.kbIds, toolIds: bindForm.value.toolIds })
+  await api.adminAgents.bindings(bindForm.value.id, {
+    kbIds: bindForm.value.kbIds, toolIds: bindForm.value.toolIds, mcpIds: bindForm.value.mcpIds
+  })
   bindDialog.value = false; ElMessage.success('绑定已更新')
 }
 onMounted(load)
@@ -61,7 +65,14 @@ onMounted(load)
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" /></el-form-item>
         <el-form-item label="系统提示词"><el-input v-model="form.systemPrompt" type="textarea" :rows="4" /></el-form-item>
-        <el-form-item label="模型"><el-input v-model="form.model" placeholder="gpt-4o-mini" /></el-form-item>
+        <el-form-item label="模型端点">
+          <el-select v-model="form.modelConfigId" clearable placeholder="选已登记的模型(留空用全局默认)" style="width:100%">
+            <el-option v-for="m in models" :key="m.id" :label="`${m.name} (${m.model})`" :value="m.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="模型名">
+          <el-input v-model="form.model" placeholder="未选端点时用，如 gpt-4o-mini" />
+        </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="form.agentType">
             <el-option label="纯对话 chat" value="chat" />
@@ -87,6 +98,11 @@ onMounted(load)
         <el-form-item label="工具">
           <el-select v-model="bindForm.toolIds" multiple style="width:100%">
             <el-option v-for="t in tools" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="MCP">
+          <el-select v-model="bindForm.mcpIds" multiple style="width:100%">
+            <el-option v-for="m in mcps" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
       </el-form>

@@ -9,8 +9,11 @@ const routes = [
       { path: '', redirect: '/chat' },
       { path: 'chat', component: () => import('../views/chat/ChatView.vue') },
       { path: 'admin/agents', component: () => import('../views/admin/AgentsView.vue') },
+      { path: 'admin/models', component: () => import('../views/admin/ModelsView.vue') },
       { path: 'admin/knowledge', component: () => import('../views/admin/KnowledgeView.vue') },
       { path: 'admin/tools', component: () => import('../views/admin/ToolsView.vue') },
+      { path: 'admin/mcp', component: () => import('../views/admin/McpView.vue') },
+      { path: 'admin/monitor', component: () => import('../views/admin/MonitorView.vue') },
       { path: 'admin/conversations', component: () => import('../views/admin/ConversationsView.vue') }
     ]
   }
