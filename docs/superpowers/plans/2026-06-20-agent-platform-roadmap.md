@@ -39,4 +39,4 @@
 - [x] 03 RAG（完成：21 测试全绿。经验：自定义 vectorStore bean 需排除 `RedisVectorStoreAutoConfiguration` 避免 bean 同名冲突；测试用 FakeEmbeddingModel 避免向量库初始化触发 embedding 网络调用；`rag.auto-process=false` 关闭测试中的异步处理保证确定性）
 - [x] 04 工具（完成：25 测试全绿。HTTP 工具 + DynamicHttpToolCallback 适配 Spring AI ToolCallback，框架内置自动执行；Agent-工具绑定）
 - [x] 05 多步骤 ReAct + 编排完善（完成：26 测试全绿。用 Spring AI 核心 ToolCallingManager 手动循环 + maxSteps=8 + step 事件 + 轨迹落库；未用 graph，等价达成）
-- [ ] 06 前端
+- [x] 06 前端（完成：后端 27 测试全绿 + 前端 SSE 单测 + npm run build 通过。Vue3+Element Plus 对话端与管理后台 4 页；补了 admin 会话审计端点）
