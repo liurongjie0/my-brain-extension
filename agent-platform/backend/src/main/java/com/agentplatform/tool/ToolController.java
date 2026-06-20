@@ -3,6 +3,7 @@ package com.agentplatform.tool;
 import com.agentplatform.common.ApiResponse;
 import com.agentplatform.tool.dto.ToolRequest;
 import com.agentplatform.tool.dto.ToolResponse;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,7 +20,7 @@ public class ToolController {
     }
 
     @PostMapping
-    public ApiResponse<ToolResponse> create(@RequestBody ToolRequest req) {
+    public ApiResponse<ToolResponse> create(@Valid @RequestBody ToolRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 
@@ -34,7 +35,7 @@ public class ToolController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ToolResponse> update(@PathVariable Long id, @RequestBody ToolRequest req) {
+    public ApiResponse<ToolResponse> update(@PathVariable Long id, @Valid @RequestBody ToolRequest req) {
         return ApiResponse.ok(service.update(id, req));
     }
 

@@ -2,8 +2,10 @@ package com.agentplatform.tool;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -17,17 +19,26 @@ import java.util.Map;
 public class HttpToolExecutor {
 
     private final ObjectMapper objectMapper;
+    private final boolean allowPrivateNetwork;
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10)).build();
 
-    public HttpToolExecutor(ObjectMapper objectMapper) {
+    public HttpToolExecutor(ObjectMapper objectMapper,
+                            @Value("${tool.allow-private-network:false}") boolean allowPrivateNetwork) {
         this.objectMapper = objectMapper;
+        this.allowPrivateNetwork = allowPrivateNetwork;
     }
 
     public String execute(ToolEntity tool, String argsJson) {
         try {
             String method = tool.getMethod() != null ? tool.getMethod().toUpperCase() : "POST";
             String url = tool.getUrl();
+
+            String blocked = checkSsrf(url);
+            if (blocked != null) {
+                return "{\"error\":\"" + blocked + "\"}";
+            }
+
             HttpRequest.Builder builder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(30));
 
             applyHeaders(builder, tool.getHeadersJson());
@@ -48,6 +59,34 @@ public class HttpToolExecutor {
             return body.length() > 8192 ? body.substring(0, 8192) : body;
         } catch (Exception e) {
             return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    /**
+     * Guards against SSRF: unless explicitly allowed, reject URLs that resolve to
+     * loopback / link-local (incl. 169.254.169.254 cloud metadata) / private addresses.
+     * Returns an error message if blocked, or null if allowed.
+     */
+    private String checkSsrf(String url) {
+        if (allowPrivateNetwork) return null;
+        try {
+            URI uri = URI.create(url);
+            String scheme = uri.getScheme();
+            if (scheme == null || !(scheme.equals("http") || scheme.equals("https"))) {
+                return "unsupported url scheme";
+            }
+            String host = uri.getHost();
+            if (host == null) return "invalid url host";
+            for (InetAddress addr : InetAddress.getAllByName(host)) {
+                if (addr.isLoopbackAddress() || addr.isLinkLocalAddress()
+                        || addr.isSiteLocalAddress() || addr.isAnyLocalAddress()
+                        || addr.isMulticastAddress()) {
+                    return "blocked internal address: " + host;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return "url resolution failed: " + e.getMessage();
         }
     }
 

@@ -1,11 +1,13 @@
 package com.agentplatform.agent.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 public record AgentRequest(
-        String name,
+        @NotBlank(message = "name 不能为空") String name,
         String description,
         String avatar,
         String systemPrompt,
-        String model,
+        @NotBlank(message = "model 不能为空") String model,
         Double temperature,
         Double topP,
         Integer maxTokens,

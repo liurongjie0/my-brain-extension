@@ -3,6 +3,8 @@ package com.agentplatform.agent;
 import com.agentplatform.agent.dto.AgentRequest;
 import com.agentplatform.agent.dto.AgentResponse;
 import com.agentplatform.common.ApiResponse;
+import jakarta.validation.Valid;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,7 +25,7 @@ public class AgentController {
     }
 
     @PostMapping("/api/admin/agents")
-    public ApiResponse<AgentResponse> create(@RequestBody AgentRequest req) {
+    public ApiResponse<AgentResponse> create(@Valid @RequestBody AgentRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 
@@ -38,7 +40,7 @@ public class AgentController {
     }
 
     @PutMapping("/api/admin/agents/{id}")
-    public ApiResponse<AgentResponse> update(@PathVariable Long id, @RequestBody AgentRequest req) {
+    public ApiResponse<AgentResponse> update(@PathVariable Long id, @Valid @RequestBody AgentRequest req) {
         return ApiResponse.ok(service.update(id, req));
     }
 
@@ -55,6 +57,7 @@ public class AgentController {
 
     public record BindingsRequest(List<Long> kbIds, List<Long> toolIds) {}
 
+    @Transactional
     @PutMapping("/api/admin/agents/{id}/bindings")
     public ApiResponse<Void> bindings(@PathVariable Long id, @RequestBody BindingsRequest req) {
         service.get(id); // validate agent exists

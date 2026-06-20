@@ -5,6 +5,7 @@ import com.agentplatform.rag.dto.DocumentResponse;
 import com.agentplatform.rag.dto.KnowledgeBaseRequest;
 import com.agentplatform.rag.dto.KnowledgeBaseResponse;
 import com.agentplatform.rag.dto.RetrieveResult;
+import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,7 +33,7 @@ public class KnowledgeBaseController {
     // ===== 知识库 CRUD =====
 
     @PostMapping
-    public ApiResponse<KnowledgeBaseResponse> create(@RequestBody KnowledgeBaseRequest req) {
+    public ApiResponse<KnowledgeBaseResponse> create(@Valid @RequestBody KnowledgeBaseRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 
