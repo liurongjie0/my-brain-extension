@@ -195,12 +195,20 @@ public class ChatOrchestrator {
                     for (AssistantMessage.ToolCall call : calls) {
                         String result = resultsById.getOrDefault(call.id(), "");
                         String shortResult = truncate(result, 300);
-                        sink.next(new ChatChunk(convId, ChatEvents.STEP,
-                                "调用 " + call.name() + "(" + call.arguments() + ") => " + shortResult));
+                        String args = call.arguments() == null ? "" : call.arguments();
                         Map<String, Object> entry = new LinkedHashMap<>();
                         entry.put("tool", call.name());
-                        entry.put("args", call.arguments());
+                        entry.put("args", args);
                         entry.put("result", shortResult);
+                        // emit the step as structured JSON so the client can render a tool-call
+                        // list with per-tool args/result drill-down (not a flat pre-joined string)
+                        String stepJson;
+                        try {
+                            stepJson = objectMapper.writeValueAsString(entry);
+                        } catch (Exception e) {
+                            stepJson = "调用 " + call.name() + "(" + args + ") => " + shortResult;
+                        }
+                        sink.next(new ChatChunk(convId, ChatEvents.STEP, stepJson));
                         trajectory.add(entry);
                     }
 
@@ -280,7 +288,8 @@ public class ChatOrchestrator {
         List<RetrieveResult> sources = List.of();
         List<Long> kbIds = bindings.findByAgentId(agent.getId()).stream()
                 .map(AgentKnowledgeBaseEntity::getKbId).toList();
-        if (!kbIds.isEmpty()) {
+        // skip RAG gracefully when retrieval is unavailable, so a KB-bound agent still chats
+        if (!kbIds.isEmpty() && retriever.isEnabled()) {
             List<RetrieveResult> hits = retriever.retrieve(kbIds, userMessage, RAG_TOP_K);
             if (!hits.isEmpty()) {
                 sources = hits;

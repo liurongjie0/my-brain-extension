@@ -86,7 +86,7 @@ onMounted(load)
             <el-tag
               size="small"
               :type="row.status === 'done' ? 'success' : row.status === 'failed' ? 'danger' : 'info'"
-            >{{ { pending: '待处理', processing: '处理中', done: '完成', failed: '失败' }[row.status] || row.status }}</el-tag>
+            >{{ { pending: '待处理', processing: '处理中', done: '完成', failed: '失败', skipped: '未启用' }[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="chunkCount" label="切片数" width="80" />

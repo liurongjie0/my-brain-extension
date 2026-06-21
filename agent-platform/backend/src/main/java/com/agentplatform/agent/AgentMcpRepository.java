@@ -9,6 +9,8 @@ import java.util.List;
 public interface AgentMcpRepository extends JpaRepository<AgentMcpEntity, AgentMcpId> {
     List<AgentMcpEntity> findByAgentId(Long agentId);
 
+    long countByAgentId(Long agentId);
+
     @Modifying
     @Transactional
     void deleteByAgentId(Long agentId);

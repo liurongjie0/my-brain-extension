@@ -1,5 +1,6 @@
 package com.agentplatform.rag;
 
+import com.agentplatform.rag.RagRetriever;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -16,19 +17,31 @@ public class DocumentProcessingService {
     private final KnowledgeBaseService kbService;
     private final DocumentRepository documentRepository;
     private final VectorStore vectorStore;
+    private final RagRetriever ragRetriever;
 
     public DocumentProcessingService(DocumentService documentService,
                                      KnowledgeBaseService kbService,
                                      DocumentRepository documentRepository,
-                                     VectorStore vectorStore) {
+                                     VectorStore vectorStore,
+                                     RagRetriever ragRetriever) {
         this.documentService = documentService;
         this.kbService = kbService;
         this.documentRepository = documentRepository;
         this.vectorStore = vectorStore;
+        this.ragRetriever = ragRetriever;
     }
 
     public void process(Long docId) {
         DocumentEntity doc = documentService.getEntity(docId);
+        // RAG disabled (no embedding endpoint): don't attempt embedding, mark as skipped so the
+        // UI shows a clear "未启用" state instead of a misleading "失败".
+        if (!ragRetriever.isEnabled()) {
+            doc.setStatus("skipped");
+            doc.setChunkCount(0);
+            documentRepository.save(doc);
+            documentService.clearRawText(docId);
+            return;
+        }
         doc.setStatus("processing");
         documentRepository.save(doc);
         try {

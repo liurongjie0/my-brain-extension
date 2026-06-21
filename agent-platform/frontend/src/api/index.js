@@ -4,6 +4,8 @@ export const api = {
   listAgents: () => http.get('/api/agents'),
   listMyConversations: (userId) => http.get('/api/conversations', { params: { userId } }),
   getMessages: (id) => http.get(`/api/conversations/${id}/messages`),
+  renameConversation: (id, title) => http.put(`/api/conversations/${id}`, { title }),
+  deleteConversation: (id) => http.delete(`/api/conversations/${id}`),
 
   adminAgents: {
     list: () => http.get('/api/admin/agents'),

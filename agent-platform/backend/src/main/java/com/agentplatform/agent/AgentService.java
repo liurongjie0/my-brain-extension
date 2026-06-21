@@ -11,9 +11,16 @@ import java.util.List;
 public class AgentService {
 
     private final AgentRepository repository;
+    private final AgentToolRepository toolRepo;
+    private final AgentKnowledgeBaseRepository kbRepo;
+    private final AgentMcpRepository mcpRepo;
 
-    public AgentService(AgentRepository repository) {
+    public AgentService(AgentRepository repository, AgentToolRepository toolRepo,
+                        AgentKnowledgeBaseRepository kbRepo, AgentMcpRepository mcpRepo) {
         this.repository = repository;
+        this.toolRepo = toolRepo;
+        this.kbRepo = kbRepo;
+        this.mcpRepo = mcpRepo;
     }
 
     public AgentResponse create(AgentRequest req) {
@@ -27,7 +34,13 @@ public class AgentService {
     }
 
     public List<AgentResponse> listEnabled() {
-        return repository.findByEnabledTrue().stream().map(AgentResponse::from).toList();
+        // attach binding counts so the chat picker can show capability chips (tools / KB / MCP)
+        return repository.findByEnabledTrue().stream()
+                .map(e -> AgentResponse.from(e,
+                        toolRepo.countByAgentId(e.getId()),
+                        kbRepo.countByAgentId(e.getId()),
+                        mcpRepo.countByAgentId(e.getId())))
+                .toList();
     }
 
     public AgentResponse get(Long id) {

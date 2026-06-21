@@ -1,10 +1,16 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../../api/index.js'
+import { renderMarkdown } from '../../utils/markdown.js'
+import ToolTrace from '../../components/ToolTrace.vue'
 
 const list = ref([]); const dialog = ref(false); const msgs = ref([])
 async function load() { list.value = await api.adminConversations.list() }
 async function view(row) { msgs.value = await api.adminConversations.messages(row.id); dialog.value = true }
+function parseSteps(toolCalls) {
+  if (!toolCalls) return []
+  try { const a = JSON.parse(toolCalls); return Array.isArray(a) ? a : [] } catch (_) { return [] }
+}
 onMounted(load)
 </script>
 
@@ -24,9 +30,14 @@ onMounted(load)
       </el-table-column>
     </el-table>
     <el-dialog v-model="dialog" title="会话轨迹" width="700">
-      <div v-for="(m, i) in msgs" :key="i" style="margin-bottom:10px">
+      <div v-for="(m, i) in msgs" :key="i" style="margin-bottom:12px">
         <el-tag size="small">{{ m.role }}</el-tag>
-        <div style="white-space:pre-wrap;margin-top:4px">{{ m.content }}</div>
+        <ToolTrace
+          v-if="m.role === 'assistant' && parseSteps(m.toolCalls).length"
+          :steps="parseSteps(m.toolCalls)" style="margin-top:6px"
+        />
+        <div v-if="m.role === 'assistant'" class="md-body" style="margin-top:6px" v-html="renderMarkdown(m.content)"></div>
+        <div v-else style="white-space:pre-wrap;margin-top:4px">{{ m.content }}</div>
       </div>
     </el-dialog>
   </div>

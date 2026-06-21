@@ -9,6 +9,8 @@ import java.util.List;
 public interface AgentToolRepository extends JpaRepository<AgentToolEntity, AgentToolId> {
     List<AgentToolEntity> findByAgentId(Long agentId);
 
+    long countByAgentId(Long agentId);
+
     @Modifying
     @Transactional
     void deleteByAgentId(Long agentId);

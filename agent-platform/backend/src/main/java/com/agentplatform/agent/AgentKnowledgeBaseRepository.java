@@ -9,6 +9,8 @@ import java.util.List;
 public interface AgentKnowledgeBaseRepository extends JpaRepository<AgentKnowledgeBaseEntity, AgentKbId> {
     List<AgentKnowledgeBaseEntity> findByAgentId(Long agentId);
 
+    long countByAgentId(Long agentId);
+
     @Modifying
     @Transactional
     void deleteByAgentId(Long agentId);

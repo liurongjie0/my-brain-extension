@@ -17,12 +17,13 @@ export function parseSseChunk(buffer) {
   return { events, rest }
 }
 
-export async function streamChat(body, { onEvent, onError, onDone }) {
+export async function streamChat(body, { onEvent, onError, onDone, signal }) {
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal
     })
     // server may answer with a JSON error (e.g. agent disabled / validation) instead of a stream
     const contentType = resp.headers.get('content-type') || ''
@@ -48,6 +49,8 @@ export async function streamChat(body, { onEvent, onError, onDone }) {
     }
     onDone && onDone()
   } catch (err) {
+    // user-initiated stop: end quietly, not as an error
+    if (err && err.name === 'AbortError') { onDone && onDone(); return }
     onError && onError(err)
   }
 }
