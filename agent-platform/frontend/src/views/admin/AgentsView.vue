@@ -6,20 +6,27 @@ import { ElMessage } from 'element-plus'
 const list = ref([]); const kbs = ref([]); const tools = ref([]); const models = ref([]); const mcps = ref([])
 const dialog = ref(false); const bindDialog = ref(false)
 const form = ref({}); const bindForm = ref({ id: null, kbIds: [], toolIds: [], mcpIds: [] })
+const loading = ref(false); const saving = ref(false)
 
 async function load() {
-  list.value = await api.adminAgents.list()
-  kbs.value = await api.adminKbs.list()
-  tools.value = await api.adminTools.list()
-  models.value = await api.adminModels.list()
-  mcps.value = await api.adminMcp.list()
+  loading.value = true
+  try {
+    const [l, k, t, m, mc] = await Promise.all([
+      api.adminAgents.list(), api.adminKbs.list(), api.adminTools.list(),
+      api.adminModels.list(), api.adminMcp.list()
+    ])
+    list.value = l || []; kbs.value = k || []; tools.value = t || []; models.value = m || []; mcps.value = mc || []
+  } finally { loading.value = false }
 }
 function create() { form.value = { agentType: 'chat', temperature: 0.7, maxTokens: 2048, topP: 1.0, enabled: true }; dialog.value = true }
 function edit(row) { form.value = { ...row }; dialog.value = true }
 async function save() {
-  if (form.value.id) await api.adminAgents.update(form.value.id, form.value)
-  else await api.adminAgents.create(form.value)
-  dialog.value = false; ElMessage.success('已保存'); load()
+  saving.value = true
+  try {
+    if (form.value.id) await api.adminAgents.update(form.value.id, form.value)
+    else await api.adminAgents.create(form.value)
+    dialog.value = false; ElMessage.success('已保存'); load()
+  } catch (_) { /* interceptor 已提示 */ } finally { saving.value = false }
 }
 async function remove(row) { await api.adminAgents.remove(row.id); ElMessage.success('已删除'); load() }
 async function openBind(row) {
@@ -28,10 +35,13 @@ async function openBind(row) {
   bindDialog.value = true
 }
 async function saveBind() {
-  await api.adminAgents.bindings(bindForm.value.id, {
-    kbIds: bindForm.value.kbIds, toolIds: bindForm.value.toolIds, mcpIds: bindForm.value.mcpIds
-  })
-  bindDialog.value = false; ElMessage.success('绑定已更新')
+  saving.value = true
+  try {
+    await api.adminAgents.bindings(bindForm.value.id, {
+      kbIds: bindForm.value.kbIds, toolIds: bindForm.value.toolIds, mcpIds: bindForm.value.mcpIds
+    })
+    bindDialog.value = false; ElMessage.success('绑定已更新')
+  } catch (_) { /* interceptor 已提示 */ } finally { saving.value = false }
 }
 onMounted(load)
 </script>
@@ -45,7 +55,7 @@ onMounted(load)
       </div>
       <el-button type="primary" @click="create">新建 Agent</el-button>
     </div>
-    <el-table :data="list">
+    <el-table :data="list" v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="agentType" label="类型" width="90" />
@@ -89,7 +99,7 @@ onMounted(load)
         <el-form-item label="maxTokens"><el-input-number v-model="form.maxTokens" :step="128" :min="1" /></el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="bindDialog" title="绑定知识库/工具" width="500">
@@ -110,7 +120,7 @@ onMounted(load)
           </el-select>
         </el-form-item>
       </el-form>
-      <template #footer><el-button @click="bindDialog = false">取消</el-button><el-button type="primary" @click="saveBind">保存</el-button></template>
+      <template #footer><el-button @click="bindDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveBind">保存</el-button></template>
     </el-dialog>
   </div>
 </template>

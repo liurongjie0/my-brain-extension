@@ -19,7 +19,7 @@
   /* ---- ink: near-black with a graded soft ramp ---- */
   --ink: #23201d;
   --ink-soft: #5f5b53;
-  --muted: #989488;
+  --muted: #6e6a5f;        /* WCAG AA: ~5.4:1 on white, was #989488 (~2.9:1) */
 
   /* ---- hairlines ---- */
   --line: #ece8e0;
@@ -187,10 +187,14 @@ h3 { font-size: var(--fs-h3); }
   --el-table-header-bg-color: var(--surface-2);
   --el-table-header-text-color: var(--ink-soft);
   --el-table-row-hover-bg-color: var(--clay-tint);
-  background: transparent;
-  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
   font-size: var(--fs-sm);
 }
+.el-table::before { display: none; }   /* el's full-width bottom hairline — redundant with our border */
 .el-table th.el-table__cell {
   font-weight: 600;
   font-size: var(--fs-xs);
@@ -255,6 +259,23 @@ h3 { font-size: var(--fs-h3); }
   font-size: var(--fs-sm);
   line-height: var(--lh-snug);
   color: var(--muted);
+}
+
+/* visually-hidden but available to screen readers */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .gcard:hover { transform: none; }
 }
 
 /* thin warm scrollbars */

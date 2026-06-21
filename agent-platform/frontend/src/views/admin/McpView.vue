@@ -5,8 +5,12 @@ import { ElMessage } from 'element-plus'
 
 const list = ref([]); const dialog = ref(false); const form = ref({})
 const testDialog = ref(false); const testTools = ref([]); const testName = ref('')
+const loading = ref(false); const testing = ref(false)
 
-async function load() { list.value = await api.adminMcp.list() }
+async function load() {
+  loading.value = true
+  try { list.value = (await api.adminMcp.list()) || [] } finally { loading.value = false }
+}
 function create() { form.value = { transport: 'sse', enabled: true }; dialog.value = true }
 function edit(row) { form.value = { ...row }; dialog.value = true }
 async function save() {
@@ -16,11 +20,11 @@ async function save() {
 }
 async function remove(row) { await api.adminMcp.remove(row.id); ElMessage.success('已删除'); load() }
 async function test(row) {
-  testName.value = row.name; testTools.value = []; testDialog.value = true
+  testName.value = row.name; testTools.value = []; testDialog.value = true; testing.value = true
   try {
-    testTools.value = await api.adminMcp.test(row.id)
+    testTools.value = (await api.adminMcp.test(row.id)) || []
     ElMessage.success(`连接成功，发现 ${testTools.value.length} 个工具`)
-  } catch (e) { /* 错误已由拦截器提示 */ }
+  } catch (e) { /* 错误已由拦截器提示 */ } finally { testing.value = false }
 }
 onMounted(load)
 </script>
@@ -34,7 +38,7 @@ onMounted(load)
       </div>
       <el-button type="primary" @click="create">新建 MCP</el-button>
     </div>
-    <el-table :data="list">
+    <el-table :data="list" v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="transport" label="传输" width="90" />
@@ -71,11 +75,13 @@ onMounted(load)
     </el-dialog>
 
     <el-dialog v-model="testDialog" :title="`连接测试 · ${testName}`" width="500">
-      <div v-if="testTools.length">
-        <div style="margin-bottom:8px;color:var(--muted);font-size:13px">该 MCP 暴露的工具：</div>
-        <el-tag v-for="t in testTools" :key="t" style="margin:0 6px 6px 0">{{ t }}</el-tag>
+      <div v-loading="testing" :element-loading-text="testing ? '连接中…' : ''" style="min-height:72px">
+        <div v-if="testTools.length">
+          <div style="margin-bottom:8px;color:var(--muted);font-size:13px">该 MCP 暴露的工具：</div>
+          <el-tag v-for="t in testTools" :key="t" style="margin:0 6px 6px 0">{{ t }}</el-tag>
+        </div>
+        <el-empty v-else-if="!testing" description="未发现工具或连接失败" :image-size="80" />
       </div>
-      <el-empty v-else description="未发现工具或连接失败" :image-size="80" />
     </el-dialog>
   </div>
 </template>

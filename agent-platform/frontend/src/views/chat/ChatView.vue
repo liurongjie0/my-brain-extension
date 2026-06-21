@@ -1,12 +1,23 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../../api/index.js'
 import { streamChat } from '../../api/sse.js'
 import { useUserStore } from '../../stores/user.js'
 import { renderMarkdown } from '../../utils/markdown.js'
 import ToolTrace from '../../components/ToolTrace.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { SendHorizontal, Square, Search, Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, Check } from 'lucide-vue-next'
+import {
+  SendHorizontal, Square, Search, Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, Check, Menu,
+  Settings2, Bot, MessageCircle, BookOpen, Wrench, Workflow, Sparkles, Lightbulb, MessageSquare
+} from 'lucide-vue-next'
+
+const router = useRouter()
+// agent identity icon by type (replaces the single-character avatar)
+const agentTypeIcon = { chat: MessageCircle, rag: BookOpen, tool: Wrench, react: Workflow }
+function agentIcon(type) { return agentTypeIcon[type] || Bot }
+// rotating icons for the recommendation pills on the empty state
+const recoIcons = [Sparkles, Lightbulb, Workflow, Search]
 
 const userStore = useUserStore()
 const userId = userStore.ensureUserId()
@@ -21,6 +32,7 @@ const scroller = ref(null)
 const composer = ref(null)
 const agentMenu = ref(false)
 const agentQuery = ref('')
+const historyDrawer = ref(false)
 
 const typeLabel = { chat: '对话', rag: '知识', tool: '工具', react: '多步骤' }
 const examples = ['用一句话介绍你的能力', '帮我把这段话润色得更正式一点', '用工具计算 128 + 256', '给我三个本周可以做的小事']
@@ -59,10 +71,11 @@ const filteredAgents = computed(() => {
     (a.name || '').toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
 })
 
-async function loadAgents() { agents.value = await api.listAgents() }
-async function loadConversations() { conversations.value = await api.listMyConversations(userId) }
+async function loadAgents() { agents.value = (await api.listAgents()) || [] }
+async function loadConversations() { conversations.value = (await api.listMyConversations(userId)) || [] }
 
 function selectAgent(a) {
+  resetStream()
   currentAgent.value = a
   conversationId.value = null
   messages.value = []
@@ -71,14 +84,17 @@ function selectAgent(a) {
   nextTick(() => composer.value && composer.value.focus())
 }
 function newChat() {
+  resetStream()
   conversationId.value = null
   messages.value = []
   nextTick(() => composer.value && composer.value.focus())
 }
 async function openConversation(c) {
+  resetStream()
   conversationId.value = c.id
   currentAgent.value = agents.value.find((a) => a.id === c.agentId) || currentAgent.value
-  const history = await api.getMessages(c.id)
+  messages.value = []
+  const history = (await api.getMessages(c.id)) || []
   messages.value = history.map((m) => ({ role: m.role, content: m.content, steps: parseSteps(m.toolCalls), sources: [], error: '' }))
   scrollToBottom()
 }
@@ -113,6 +129,21 @@ const pickStep = (data) => { const c = pick(data); try { return JSON.parse(c) } 
 
 function useExample(t) { input.value = t; nextTick(() => composer.value && composer.value.focus()) }
 
+// abort any in-flight stream and unlock the composer — called when the context changes
+function resetStream() {
+  if (abort) { abort.abort(); abort = null }
+  sending.value = false
+}
+function finalize(localAbort) {
+  if (abort === localAbort) { abort = null; sending.value = false }
+}
+function onEnter(e) {
+  // ignore Enter while an IME candidate is being composed (Chinese/Japanese/Korean input)
+  if (e.isComposing || e.keyCode === 229) return
+  e.preventDefault()
+  send()
+}
+
 async function send() {
   if (!currentAgent.value || !input.value.trim() || sending.value) return
   const text = input.value.trim()
@@ -120,14 +151,18 @@ async function send() {
   messages.value.push({ role: 'user', content: text, steps: [] })
   messages.value.push({ role: 'assistant', content: '', steps: [], sources: [], error: '' })
   const assistant = messages.value[messages.value.length - 1]
+  const localAbort = new AbortController()
+  abort = localAbort
   sending.value = true
   scrollToBottom()
-  abort = new AbortController()
+  // ignore events from a stream that has been superseded by an agent/conversation switch
+  const live = () => abort === localAbort && !localAbort.signal.aborted
   await streamChat(
     { agentId: currentAgent.value.id, conversationId: conversationId.value, message: text, userId },
     {
-      signal: abort.signal,
+      signal: localAbort.signal,
       onEvent: (e) => {
+        if (!live()) return
         if (e.event === 'meta') { try { conversationId.value = JSON.parse(e.data).conversationId } catch (_) {} }
         else if (e.event === 'token') assistant.content += pick(e.data)
         else if (e.event === 'step') assistant.steps.push(pickStep(e.data))
@@ -135,12 +170,12 @@ async function send() {
         else if (e.event === 'error') assistant.error = pick(e.data)
         scrollToBottom()
       },
-      onError: (err) => { assistant.error = err.message || '连接出错，请重试'; sending.value = false },
-      onDone: () => { sending.value = false; abort = null; loadConversations(); scrollToBottom() }
+      onError: (err) => { if (!live()) return; assistant.error = err.message || '连接出错，请重试'; finalize(localAbort) },
+      onDone: () => { if (abort !== localAbort) return; finalize(localAbort); loadConversations(); scrollToBottom() }
     }
   )
 }
-function stop() { if (abort) { abort.abort(); abort = null } sending.value = false }
+function stop() { resetStream() }
 
 onMounted(() => { loadAgents(); loadConversations() })
 </script>
@@ -154,8 +189,12 @@ onMounted(() => { loadAgents(); loadConversations() })
         <div
           v-for="c in conversations" :key="c.id"
           class="conv" :class="{ on: conversationId === c.id }"
+          role="button" tabindex="0" :aria-current="conversationId === c.id ? 'true' : undefined"
           @click="openConversation(c)"
+          @keydown.enter.prevent="openConversation(c)"
+          @keydown.space.prevent="openConversation(c)"
         >
+          <MessageSquare class="conv-ic" :size="15" :stroke-width="1.8" aria-hidden="true" />
           <div class="conv-main">
             <span class="conv-t">{{ c.title || '未命名会话' }}</span>
             <span class="conv-sub">{{ agentName(c.agentId) }} · {{ relTime(c.updatedAt) }}</span>
@@ -164,7 +203,7 @@ onMounted(() => { loadAgents(); loadConversations() })
             trigger="click" placement="bottom-end"
             @command="(cmd) => cmd === 'rename' ? renameConversation(c) : removeConversation(c)"
           >
-            <span class="conv-more" @click.stop><MoreHorizontal :size="16" /></span>
+            <button type="button" class="conv-more" aria-label="会话操作" @click.stop><MoreHorizontal :size="16" /></button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="rename"><Pencil :size="14" :stroke-width="2" style="margin-right:7px" />重命名</el-dropdown-item>
@@ -175,18 +214,24 @@ onMounted(() => { loadAgents(); loadConversations() })
         </div>
         <div v-if="!conversations.length" class="hint">暂无历史</div>
       </div>
+      <router-link to="/admin" class="admin-entry">
+        <Settings2 :size="16" :stroke-width="1.9" aria-hidden="true" /> 管理后台
+      </router-link>
     </aside>
 
     <section class="main">
       <header class="topbar">
+        <button class="nav-trigger" type="button" aria-label="会话列表" @click="historyDrawer = true">
+          <Menu :size="18" :stroke-width="2" />
+        </button>
         <el-popover
           v-model:visible="agentMenu" trigger="click" :width="300"
           placement="bottom-start" popper-class="agent-pop" :teleported="true"
         >
           <template #reference>
-            <button class="switcher">
+            <button class="switcher" aria-haspopup="listbox" :aria-expanded="agentMenu">
               <template v-if="currentAgent">
-                <span class="ava sm">{{ initial(currentAgent.name) }}</span>
+                <span class="ava sm"><component :is="agentIcon(currentAgent.agentType)" :size="14" :stroke-width="1.9" /></span>
                 <span class="sw-name">{{ currentAgent.name }}</span>
                 <span class="sw-type">{{ typeLabel[currentAgent.agentType] }}</span>
               </template>
@@ -204,7 +249,7 @@ onMounted(() => { loadAgents(); loadConversations() })
                 class="ap-item" :class="{ on: currentAgent && currentAgent.id === a.id }"
                 @click="selectAgent(a)"
               >
-                <span class="ava sm">{{ initial(a.name) }}</span>
+                <span class="ava sm"><component :is="agentIcon(a.agentType)" :size="15" :stroke-width="1.9" /></span>
                 <span class="ap-meta">
                   <span class="ap-name">{{ a.name }} <i class="ap-badge">{{ typeLabel[a.agentType] }}</i></span>
                   <span v-if="caps(a).length" class="ap-caps">
@@ -223,37 +268,36 @@ onMounted(() => { loadAgents(); loadConversations() })
 
       <div class="stream" ref="scroller">
         <div v-if="empty" class="welcome">
-          <div class="welcome-mark brand-serif">A</div>
-          <h3>{{ currentAgent ? `开始与「${currentAgent.name}」对话` : '挑一个 Agent 开始' }}</h3>
-          <p>{{ currentAgent ? '问它任何问题，或试试下面的示例。' : '点击卡片选择一个 Agent。' }}</p>
-
-          <div v-if="!currentAgent" class="gallery">
-            <button v-for="a in agents" :key="a.id" class="gcard" @click="selectAgent(a)">
-              <span class="ava">{{ initial(a.name) }}</span>
-              <span class="g-head">
-                <span class="g-name">{{ a.name }}</span>
-                <span class="g-type">{{ typeLabel[a.agentType] }}</span>
-              </span>
-              <span class="g-desc">{{ a.description || '—' }}</span>
-              <span v-if="caps(a).length" class="g-caps">
-                <i v-for="c in caps(a)" :key="c" class="cap">{{ c }}</i>
-              </span>
-            </button>
-            <div v-if="!agents.length" class="hint">还没有启用的 Agent</div>
-          </div>
-          <div v-else class="examples">
-            <button v-for="ex in examples" :key="ex" class="ex" @click="useExample(ex)">{{ ex }}</button>
+          <h1 class="hi">Hi，今天从哪里开始</h1>
+          <p class="hi-sub">{{ currentAgent ? `「${currentAgent.name}」已就绪，点击下方推荐或直接提问` : '选择一个助手，或点击下方推荐开始' }}</p>
+          <div class="recos">
+            <template v-if="currentAgent">
+              <button v-for="(ex, i) in examples" :key="ex" class="reco" @click="useExample(ex)">
+                <component :is="recoIcons[i % recoIcons.length]" class="reco-ic" :size="17" :stroke-width="1.8" />
+                <span class="reco-tx"><span class="reco-main">{{ ex }}</span></span>
+              </button>
+            </template>
+            <template v-else>
+              <button v-for="a in agents" :key="a.id" class="reco" @click="selectAgent(a)">
+                <component :is="agentIcon(a.agentType)" class="reco-ic" :size="17" :stroke-width="1.8" />
+                <span class="reco-tx">
+                  <span class="reco-main">{{ a.name }}</span>
+                  <span class="reco-sub">{{ a.description || typeLabel[a.agentType] + ' 助手' }}</span>
+                </span>
+              </button>
+              <div v-if="!agents.length" class="hint">还没有启用的 Agent</div>
+            </template>
           </div>
         </div>
 
         <div v-else class="thread">
           <div v-for="(m, i) in messages" :key="i" class="row" :class="m.role">
             <template v-if="m.role === 'assistant'">
-              <span class="ava sm a-ava">{{ initial(currentAgent && currentAgent.name) }}</span>
+              <span class="ava sm a-ava"><component :is="agentIcon(currentAgent && currentAgent.agentType)" :size="14" :stroke-width="1.9" /></span>
               <div class="bubble a-bubble">
                 <ToolTrace v-if="m.steps && m.steps.length" :steps="m.steps" class="mb" />
-                <div class="text md" v-html="renderMarkdown(m.content || (sending && !m.error ? '思考中…' : ''))"></div>
-                <div v-if="m.error" class="err">{{ m.error }}</div>
+                <div class="text md" v-html="renderMarkdown(m.content || (i === messages.length - 1 && sending && !m.error ? '思考中…' : ''))"></div>
+                <div v-if="m.error" class="err" role="alert">{{ m.error }}</div>
                 <div v-if="m.sources && m.sources.length" class="sources">
                   <div class="sources-title">引用来源 · {{ m.sources.length }}</div>
                   <div v-for="(s, si) in m.sources" :key="si" class="source">{{ s }}</div>
@@ -269,22 +313,61 @@ onMounted(() => { loadAgents(); loadConversations() })
         <div class="composer-inner">
           <textarea
             ref="composer" v-model="input" class="composer-input"
-            :placeholder="currentAgent ? '输入消息，回车发送，Shift+回车换行' : '请先选择一个 Agent'"
-            :disabled="!currentAgent || sending" rows="1"
-            @keydown.enter.exact.prevent="send"
+            :placeholder="currentAgent ? '有问题，尽管问，Shift+回车换行' : '请先选择一个 Agent'"
+            :disabled="!currentAgent || sending" rows="2"
+            @keydown.enter.exact="onEnter"
           />
-          <button v-if="sending" class="send stop" @click="stop"><Square :size="14" :stroke-width="2.2" /> 停止</button>
-          <button v-else class="send" :disabled="!currentAgent || !input.trim()" @click="send">
-            <SendHorizontal :size="18" :stroke-width="2" />
-          </button>
+          <div class="composer-bar">
+            <span class="cb-sp"></span>
+            <button v-if="sending" class="send stop" @click="stop"><Square :size="14" :stroke-width="2.2" /> 停止</button>
+            <button v-else class="send" :disabled="!currentAgent || !input.trim()" aria-label="发送" @click="send">
+              <SendHorizontal :size="18" :stroke-width="2" />
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- narrow-screen access to history (the .history rail is hidden under 760px) -->
+      <el-drawer v-model="historyDrawer" direction="ltr" :with-header="false" size="272px" :append-to-body="false">
+        <div class="drawer-history">
+          <button class="new-btn" @click="newChat(); historyDrawer = false"><Plus :size="16" :stroke-width="2" /> 新对话</button>
+          <div class="h-title">我的会话</div>
+          <div class="conv-list">
+            <div
+              v-for="c in conversations" :key="c.id"
+              class="conv" :class="{ on: conversationId === c.id }"
+              role="button" tabindex="0"
+              @click="openConversation(c); historyDrawer = false"
+              @keydown.enter.prevent="openConversation(c); historyDrawer = false"
+            >
+              <div class="conv-main">
+                <span class="conv-t">{{ c.title || '未命名会话' }}</span>
+                <span class="conv-sub">{{ agentName(c.agentId) }} · {{ relTime(c.updatedAt) }}</span>
+              </div>
+            </div>
+            <div v-if="!conversations.length" class="hint">暂无历史</div>
+          </div>
+        </div>
+      </el-drawer>
     </section>
   </div>
 </template>
 
 <style scoped>
-.chat { display: flex; height: 100vh; }
+.chat {
+  display: flex; height: 100vh;
+  /* the user page uses a cooler, whiter palette than the warm admin console */
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+  --line: #ececef;
+  --line-soft: #f3f4f6;
+  --ink: #1f2227;
+  --ink-soft: #5a606b;
+  --muted: #8b909b;
+  --sand: #f7f8fa;
+  --sand-deep: #e9eaee;
+}
 
 /* ---- history rail ---- */
 .history {
@@ -303,7 +386,7 @@ onMounted(() => { loadAgents(); loadConversations() })
   font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--muted); padding: 18px 8px 8px;
 }
-.conv-list { display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.conv-list { flex: 1; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
 .conv {
   position: relative; display: flex; align-items: center; gap: 6px;
   padding: 8px 8px 8px 11px; border-radius: 10px; cursor: pointer;
@@ -314,6 +397,8 @@ onMounted(() => { loadAgents(); loadConversations() })
   content: ''; position: absolute; left: 3px; top: 9px; bottom: 9px;
   width: 3px; border-radius: 3px; background: var(--clay);
 }
+.conv-ic { flex-shrink: 0; color: var(--muted); }
+.conv.on .conv-ic { color: var(--clay); }
 .conv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .conv-t {
   font-size: 13.5px; color: var(--ink);
@@ -325,10 +410,23 @@ onMounted(() => { loadAgents(); loadConversations() })
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .conv.on .conv-sub { color: var(--clay); }
-.conv-more { display: flex; opacity: 0; color: var(--muted); padding: 2px; border-radius: 5px; }
-.conv:hover .conv-more { opacity: 1; }
+.conv:focus-visible { outline: 2px solid var(--clay); outline-offset: -2px; }
+.conv-more {
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; color: var(--muted); padding: 2px; border-radius: 5px;
+  border: none; background: transparent; cursor: pointer;
+}
+.conv:hover .conv-more, .conv-more:focus-visible { opacity: 1; }
 .conv-more:hover { background: var(--surface-2); color: var(--ink); }
 .hint { padding: 10px; font-size: 13px; color: var(--muted); }
+.admin-entry {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  margin-top: 10px; padding: 9px 11px; border-radius: 9px;
+  border: 1px solid transparent; text-decoration: none;
+  color: var(--ink-soft); font-size: 13px; font-weight: 500;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.admin-entry:hover { background: var(--surface); color: var(--clay-deep); }
 
 /* ---- main ---- */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--canvas); }
@@ -355,54 +453,34 @@ onMounted(() => { loadAgents(); loadConversations() })
   display: grid; place-items: center; font-weight: 700; font-size: 15px;
 }
 .ava.sm { width: 24px; height: 24px; border-radius: 7px; font-size: 12px; }
+.ava.lg { width: 42px; height: 42px; border-radius: 12px; }
 
 /* ---- stream ---- */
 .stream { flex: 1; overflow: auto; }
-.welcome { max-width: 720px; margin: 0 auto; text-align: center; padding: 10vh 24px 40px; }
-.welcome-mark {
-  width: 62px; height: 62px; margin: 0 auto 18px; border-radius: 19px;
-  background: var(--clay); color: #fff; display: grid; place-items: center;
-  font-size: var(--fs-display); font-weight: 600;
-  box-shadow: 0 10px 28px -6px rgba(76, 102, 224, 0.42);
-}
-.welcome h3 { margin: 0 0 7px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
-.welcome p { margin: 0 0 24px; font-size: var(--fs-body); color: var(--muted); }
+.welcome { max-width: 580px; margin: 0 auto; padding: 16vh 24px 40px; }
+.hi { text-align: center; font-size: 27px; font-weight: 600; letter-spacing: -0.012em; color: var(--ink); }
+.hi-sub { text-align: center; margin: 11px 0 30px; font-size: 14px; color: var(--muted); }
 
-.gallery {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px; text-align: left;
+.recos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.reco {
+  display: flex; align-items: center; gap: 11px;
+  padding: 13px 15px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); cursor: pointer; font: inherit; text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
-.gcard {
-  display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
-  padding: 17px 18px; border: 1px solid var(--line); border-radius: var(--r-lg);
-  background: var(--surface); cursor: pointer; font: inherit;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.2s ease;
+.reco:hover { border-color: #c6cef5; background: var(--clay-tint); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.reco-ic { flex-shrink: 0; color: var(--clay); }
+.reco-tx { min-width: 0; display: flex; flex-direction: column; }
+.reco-main {
+  font-size: 13.5px; color: var(--ink); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.gcard:hover { border-color: #c6cef5; transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.g-head { display: flex; align-items: center; gap: 8px; }
-.g-name { font-weight: 650; color: var(--ink); font-size: 14.5px; }
-.g-type {
-  font-size: 11px; color: var(--clay-deep); background: var(--clay-tint);
-  padding: 1px 7px; border-radius: 6px;
-}
-.g-desc {
-  font-size: 12.5px; color: var(--muted); line-height: 1.5;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.g-caps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
-.cap {
-  font-style: normal; font-size: 11px; color: var(--clay-deep);
-  background: var(--clay-tint); padding: 1px 7px; border-radius: 6px;
+.reco-sub {
+  font-size: 11.5px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.examples { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.ex {
-  padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px;
-  background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 13px;
-  cursor: pointer; transition: all 0.14s ease;
-}
-.ex:hover { border-color: var(--clay); color: var(--ink); }
+@media (max-width: 560px) { .recos { grid-template-columns: 1fr; } }
 
 /* ---- thread ---- */
 .thread { max-width: 760px; margin: 0 auto; padding: 28px 24px 8px; }
@@ -411,14 +489,18 @@ onMounted(() => { loadAgents(); loadConversations() })
 .a-ava { margin-top: 2px; }
 .bubble { max-width: 92%; }
 .u-bubble {
-  background: var(--clay-tint); border: 1px solid #dde2fb;
+  background: var(--clay); border: none;
   border-radius: 16px 16px 5px 16px; padding: 11px 16px;
-  font-size: var(--fs-read); line-height: 1.65; color: #2f3c9e; max-width: 80%;
-  box-shadow: 0 1px 2px rgba(58, 79, 191, 0.07);
+  font-size: var(--fs-read); line-height: 1.6; color: #fff; max-width: 80%;
+  box-shadow: 0 3px 10px -3px rgba(76, 102, 224, 0.4);
   white-space: pre-wrap; word-break: break-word;
 }
-/* assistant content reads as a clean, full-width document — no bubble card */
-.a-bubble { min-width: 0; max-width: 100%; padding-top: 1px; }
+/* assistant content sits in a soft light-gray rounded card */
+.a-bubble {
+  min-width: 0; max-width: 100%;
+  background: var(--surface-2); border-radius: 4px 14px 14px 14px;
+  padding: 13px 16px;
+}
 .mb { margin-bottom: 14px; }
 .text { line-height: var(--lh-read); color: var(--ink); font-size: var(--fs-read); }
 
@@ -436,9 +518,9 @@ onMounted(() => { loadAgents(); loadConversations() })
 .text.md :deep(li::marker) { color: var(--clay); font-weight: 600; }
 .text.md :deep(li > ul), .text.md :deep(li > ol) { margin: 5px 0 3px; }
 .text.md :deep(code) {
-  background: var(--surface-2); border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   border-radius: 5px; padding: 1.5px 6px; font-size: 0.86em;
-  font-family: var(--font-mono); color: #b0432e;
+  font-family: var(--font-mono); color: #c0392b;
 }
 .text.md :deep(pre) {
   background: #2c2a28; border-radius: var(--r-md); padding: 13px 15px;
@@ -467,31 +549,47 @@ onMounted(() => { loadAgents(); loadConversations() })
 .source { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 4px; }
 
 /* ---- composer ---- */
-.composer { padding: 8px 24px 20px; }
+.composer { padding: 8px 24px 22px; }
 .composer-inner {
-  max-width: 760px; margin: 0 auto; display: flex; align-items: flex-end; gap: 10px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl);
-  padding: 9px 9px 9px 18px; box-shadow: var(--shadow-md);
+  max-width: 720px; margin: 0 auto; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+  padding: 12px 14px 10px; box-shadow: var(--shadow-md);
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.composer-inner:focus-within { border-color: var(--clay); box-shadow: var(--shadow-md), 0 0 0 3px rgba(76, 102, 224, 0.12); }
+.composer-inner:focus-within { border-color: var(--clay); box-shadow: var(--shadow-md), 0 0 0 3px rgba(76, 102, 224, 0.1); }
 .composer-input {
-  flex: 1; border: none; background: transparent; resize: none; outline: none;
-  font: inherit; font-size: 14.5px; line-height: 1.6; color: var(--ink);
-  max-height: 160px; padding: 6px 0;
+  width: 100%; border: none; background: transparent; resize: none; outline: none;
+  font: inherit; font-size: 15px; line-height: 1.6; color: var(--ink);
+  max-height: 200px; min-height: 44px; padding: 2px 2px 0;
 }
 .composer-input::placeholder { color: var(--muted); }
+.composer-bar { display: flex; align-items: center; margin-top: 6px; }
+.cb-sp { flex: 1; }
 .send {
-  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-  height: 38px; min-width: 38px; padding: 0 12px; border: none; border-radius: 11px;
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  width: 36px; height: 36px; border: none; border-radius: 50%;
   background: var(--clay); color: #fff; cursor: pointer; font: inherit; font-weight: 600;
   transition: opacity 0.14s ease, background 0.14s ease;
 }
-.send:disabled { opacity: 0.4; cursor: not-allowed; }
-.send.stop { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+.send:disabled { opacity: 0.35; cursor: not-allowed; }
+.send.stop {
+  width: auto; padding: 0 14px; border-radius: 18px;
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+}
+
+.nav-trigger {
+  display: none; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); color: var(--ink-soft); cursor: pointer;
+}
+.nav-trigger:hover { border-color: var(--clay); color: var(--clay-deep); }
+.drawer-history { display: flex; flex-direction: column; height: 100%; padding: 6px 8px; }
+.drawer-history .conv-list { overflow: auto; }
 
 @media (max-width: 760px) {
   .history { display: none; }
+  .nav-trigger { display: inline-flex; }
   .thread, .composer-inner, .welcome { padding-left: 14px; padding-right: 14px; }
 }
 </style>

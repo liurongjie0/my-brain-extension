@@ -36,7 +36,7 @@ function fmt(v) {
 
 <template>
   <div v-if="items.length" class="trace">
-    <button class="trace-head" @click="open = !open">
+    <button class="trace-head" :aria-expanded="open" @click="open = !open">
       <Wrench class="lead" :size="15" :stroke-width="2" />
       <span class="ttl">已调用 {{ items.length }} 个工具</span>
       <component :is="allOk ? CircleCheck : CircleX" class="st" :class="allOk ? 'ok' : 'bad'" :size="15" :stroke-width="2" />
@@ -46,7 +46,7 @@ function fmt(v) {
 
     <div v-if="open" class="trace-body">
       <div v-for="(it, i) in items" :key="i" class="tool">
-        <button class="tool-head" :class="{ flat: !it.tool }" @click="it.tool && toggleItem(i)">
+        <button class="tool-head" :class="{ flat: !it.tool }" :aria-expanded="it.tool ? expanded.has(i) : undefined" @click="it.tool && toggleItem(i)">
           <Wrench class="ti" :size="14" :stroke-width="2" />
           <span v-if="it.tool" class="nm">{{ it.tool }}</span>
           <span v-else class="raw">{{ it.raw }}</span>

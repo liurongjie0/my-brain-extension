@@ -6,36 +6,51 @@ import { ElMessage } from 'element-plus'
 const list = ref([]); const dialog = ref(false); const form = ref({})
 const docDialog = ref(false); const currentKb = ref(null); const docs = ref([])
 const retrieveQuery = ref(''); const retrieveResults = ref([])
+const loading = ref(false)
 let pollTimer = null
+const DOC_POLL_INTERVAL_MS = 2000
+const DOC_POLL_MAX_TICKS = 60   // stop polling after ~2min even if docs never settle
 
-async function load() { list.value = await api.adminKbs.list() }
+async function load() {
+  loading.value = true
+  try { list.value = (await api.adminKbs.list()) || [] } finally { loading.value = false }
+}
 function create() { form.value = {}; dialog.value = true }
 async function save() { await api.adminKbs.create(form.value); dialog.value = false; ElMessage.success('已创建'); load() }
 async function remove(row) { await api.adminKbs.remove(row.id); ElMessage.success('已删除'); load() }
 
 async function openDocs(row) {
-  currentKb.value = row; docDialog.value = true; retrieveResults.value = []
+  currentKb.value = row; docDialog.value = true; retrieveResults.value = []; docs.value = []
   await refreshDocs()
   startPolling()
 }
 async function refreshDocs() {
   if (!currentKb.value) return
-  docs.value = await api.adminKbs.listDocs(currentKb.value.id)
+  docs.value = (await api.adminKbs.listDocs(currentKb.value.id)) || []
 }
 function startPolling() {
   stopPolling()
+  let ticks = 0
   pollTimer = setInterval(async () => {
-    await refreshDocs()
+    ticks++
+    try { await refreshDocs() } catch (_) { stopPolling(); return }
     const busy = docs.value.some((d) => d.status === 'pending' || d.status === 'processing')
-    if (!busy) stopPolling()
-  }, 2000)
+    if (!busy || ticks >= DOC_POLL_MAX_TICKS) stopPolling()
+  }, DOC_POLL_INTERVAL_MS)
 }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
 const uploadUrl = (id) => api.adminKbs.uploadUrl(id)
+function beforeUpload(file) {
+  const ok = /\.(txt|md)$/i.test(file.name)
+  if (!ok) ElMessage.error('仅支持 .txt / .md 文档')
+  return ok
+}
 function onUploaded() { ElMessage.success('已上传，正在处理'); refreshDocs(); startPolling() }
+function onUploadError() { ElMessage.error('上传失败，请重试') }
 async function runRetrieve() {
-  retrieveResults.value = await api.adminKbs.retrieve(currentKb.value.id, retrieveQuery.value, 3)
+  if (!currentKb.value) return
+  retrieveResults.value = (await api.adminKbs.retrieve(currentKb.value.id, retrieveQuery.value, 3)) || []
 }
 
 watch(docDialog, (open) => { if (!open) stopPolling() })
@@ -52,7 +67,7 @@ onMounted(load)
       </div>
       <el-button type="primary" @click="create">新建知识库</el-button>
     </div>
-    <el-table :data="list">
+    <el-table :data="list" v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="embeddingModel" label="向量模型" />
@@ -75,7 +90,11 @@ onMounted(load)
     </el-dialog>
 
     <el-dialog v-model="docDialog" :title="currentKb ? currentKb.name : ''" width="700">
-      <el-upload :action="uploadUrl(currentKb.id)" name="file" :on-success="onUploaded" :show-file-list="false">
+      <el-upload
+        :action="currentKb ? uploadUrl(currentKb.id) : ''" name="file"
+        :before-upload="beforeUpload" :on-success="onUploaded" :on-error="onUploadError"
+        :show-file-list="false"
+      >
         <el-button type="primary">上传文档(txt/md)</el-button>
       </el-upload>
       <el-button style="margin-left:8px" @click="refreshDocs">刷新状态</el-button>
@@ -96,7 +115,7 @@ onMounted(load)
         <el-input v-model="retrieveQuery" placeholder="输入查询" />
         <el-button @click="runRetrieve">检索</el-button>
       </div>
-      <div v-for="(r, i) in retrieveResults" :key="i" style="font-size:12px;color:#666;margin-top:6px">{{ r.content }}</div>
+      <div v-for="(r, i) in retrieveResults" :key="i" style="font-size:12px;color:var(--ink-soft);margin-top:6px">{{ r.content }}</div>
     </el-dialog>
   </div>
 </template>

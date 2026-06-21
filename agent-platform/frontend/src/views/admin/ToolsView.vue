@@ -5,8 +5,12 @@ import { ElMessage } from 'element-plus'
 
 const list = ref([]); const dialog = ref(false); const form = ref({})
 const testDialog = ref(false); const testArgs = ref('{}'); const testResult = ref(''); const testId = ref(null)
+const loading = ref(false); const testing = ref(false)
 
-async function load() { list.value = await api.adminTools.list() }
+async function load() {
+  loading.value = true
+  try { list.value = (await api.adminTools.list()) || [] } finally { loading.value = false }
+}
 function create() { form.value = { method: 'POST', enabled: true }; dialog.value = true }
 function edit(row) { form.value = { ...row }; dialog.value = true }
 async function save() {
@@ -14,9 +18,14 @@ async function save() {
   else await api.adminTools.create(form.value)
   dialog.value = false; ElMessage.success('已保存'); load()
 }
-async function remove(row) { await api.adminTools.remove(row.id); load() }
+async function remove(row) { await api.adminTools.remove(row.id); ElMessage.success('已删除'); load() }
 function openTest(row) { testId.value = row.id; testArgs.value = '{}'; testResult.value = ''; testDialog.value = true }
-async function runTest() { testResult.value = await api.adminTools.test(testId.value, testArgs.value) }
+async function runTest() {
+  testing.value = true
+  try { testResult.value = await api.adminTools.test(testId.value, testArgs.value) }
+  catch (e) { testResult.value = '执行失败：' + ((e && e.message) || '请求错误') }
+  finally { testing.value = false }
+}
 onMounted(load)
 </script>
 
@@ -29,7 +38,7 @@ onMounted(load)
       </div>
       <el-button type="primary" @click="create">新建工具</el-button>
     </div>
-    <el-table :data="list">
+    <el-table :data="list" v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="method" label="方法" width="80" />
@@ -62,8 +71,8 @@ onMounted(load)
 
     <el-dialog v-model="testDialog" title="工具测试" width="600">
       <el-input v-model="testArgs" type="textarea" :rows="3" placeholder='{"city":"上海"}' />
-      <el-button type="primary" style="margin-top:8px" @click="runTest">执行</el-button>
-      <pre style="background:#f5f5f5;padding:8px;margin-top:8px;white-space:pre-wrap">{{ testResult }}</pre>
+      <el-button type="primary" :loading="testing" style="margin-top:8px" @click="runTest">执行</el-button>
+      <pre style="background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;white-space:pre-wrap">{{ testResult }}</pre>
     </el-dialog>
   </div>
 </template>

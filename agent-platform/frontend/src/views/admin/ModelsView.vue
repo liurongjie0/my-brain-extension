@@ -4,14 +4,21 @@ import { api } from '../../api/index.js'
 import { ElMessage } from 'element-plus'
 
 const list = ref([]); const dialog = ref(false); const form = ref({})
+const loading = ref(false); const saving = ref(false)
 
-async function load() { list.value = await api.adminModels.list() }
+async function load() {
+  loading.value = true
+  try { list.value = (await api.adminModels.list()) || [] } finally { loading.value = false }
+}
 function create() { form.value = { enabled: true }; dialog.value = true }
 function edit(row) { form.value = { ...row, apiKey: '' }; dialog.value = true }
 async function save() {
-  if (form.value.id) await api.adminModels.update(form.value.id, form.value)
-  else await api.adminModels.create(form.value)
-  dialog.value = false; ElMessage.success('已保存'); load()
+  saving.value = true
+  try {
+    if (form.value.id) await api.adminModels.update(form.value.id, form.value)
+    else await api.adminModels.create(form.value)
+    dialog.value = false; ElMessage.success('已保存'); load()
+  } catch (_) { /* interceptor 已提示 */ } finally { saving.value = false }
 }
 async function remove(row) { await api.adminModels.remove(row.id); ElMessage.success('已删除'); load() }
 onMounted(load)
@@ -26,7 +33,7 @@ onMounted(load)
       </div>
       <el-button type="primary" @click="create">新建模型</el-button>
     </div>
-    <el-table :data="list">
+    <el-table :data="list" v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="model" label="模型" />
@@ -55,7 +62,7 @@ onMounted(load)
         <el-form-item label="模型名"><el-input v-model="form.model" placeholder="deepseek-chat" /></el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </el-dialog>
   </div>
 </template>
