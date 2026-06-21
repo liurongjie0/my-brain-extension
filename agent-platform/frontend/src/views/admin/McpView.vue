@@ -62,7 +62,9 @@ onMounted(load)
             <el-option label="stdio（待支持）" value="stdio" disabled />
           </el-select>
         </el-form-item>
-        <el-form-item label="URL"><el-input v-model="form.url" placeholder="http://localhost:8090/sse" /></el-form-item>
+        <el-form-item label="URL">
+          <el-input v-model="form.url" placeholder="http://localhost:8765（填 base，自动补 /sse）" />
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
