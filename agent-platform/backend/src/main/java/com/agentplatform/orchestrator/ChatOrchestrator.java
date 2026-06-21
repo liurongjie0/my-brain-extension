@@ -18,19 +18,16 @@ import com.agentplatform.model.ModelConfigEntity;
 import com.agentplatform.model.ModelConfigRepository;
 import com.agentplatform.rag.RagRetriever;
 import com.agentplatform.rag.dto.RetrieveResult;
+import com.agentplatform.tool.PlanToolCallback;
 import com.agentplatform.tool.ToolCallbackFactory;
+import com.alibaba.cloud.ai.graph.CompiledGraph;
+import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
@@ -38,23 +35,28 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Orchestrates a chat turn. Non-react agents stream the response with the framework's
- * internal tool execution; react agents run a manual tool-calling loop that surfaces each
- * step incrementally over SSE and persists the full trajectory. RAG context is injected for
- * any agent bound to knowledge bases, and the retrieved sources are surfaced to the client.
+ * Orchestrates a chat turn. The actual think→act→observe control flow is a Spring AI Alibaba
+ * {@link AgentGraph} (nodes + shared state + conditional routing) — one unified graph serves
+ * every agent type. This class owns the surrounding I/O: conversation/message persistence,
+ * RAG context building, model/tool resolution, and adapting the graph's progress into the
+ * SSE {@link ChatChunk} event stream (meta/source/think/token/step/plan/done/error).
  */
 @Service
 public class ChatOrchestrator {
 
-    private static final int MAX_STEPS = 8;
     private static final int RAG_TOP_K = 4;
     private static final String AGENT_TYPE_REACT = "react";
+    private static final String PLAN_HINT =
+            "你可以使用 write_todos 工具维护一个任务清单。开始多步骤任务前，先用它列出步骤"
+            + "（status 取 pending / in_progress / completed）；每推进一步就再次调用它、发送完整清单并更新状态。"
+            + "只在任务确实需要多步时使用，简单问题直接回答。";
+
+    /** built-in plan-as-a-tool callback, injected for react agents with plan mode on */
+    private final ToolCallback planTool = new PlanToolCallback();
 
     private final ChatModel chatModel;
     private final AgentRepository agents;
@@ -64,19 +66,18 @@ public class ChatOrchestrator {
     private final RagRetriever retriever;
     private final AgentToolRepository agentTools;
     private final ToolCallbackFactory toolCallbackFactory;
-    private final ToolCallingManager toolCallingManager;
     private final ObjectMapper objectMapper;
     private final ModelConfigRepository modelConfigs;
     private final ChatModelFactory chatModelFactory;
     private final McpTools mcpTools;
+    private final AgentGraph agentGraph;
 
     public ChatOrchestrator(ChatModel chatModel, AgentRepository agents,
                             ConversationRepository conversations, MessageRepository messages,
                             AgentKnowledgeBaseRepository bindings, RagRetriever retriever,
                             AgentToolRepository agentTools, ToolCallbackFactory toolCallbackFactory,
-                            ToolCallingManager toolCallingManager, ObjectMapper objectMapper,
-                            ModelConfigRepository modelConfigs, ChatModelFactory chatModelFactory,
-                            McpTools mcpTools) {
+                            ObjectMapper objectMapper, ModelConfigRepository modelConfigs,
+                            ChatModelFactory chatModelFactory, McpTools mcpTools, AgentGraph agentGraph) {
         this.chatModel = chatModel;
         this.agents = agents;
         this.conversations = conversations;
@@ -85,11 +86,11 @@ public class ChatOrchestrator {
         this.retriever = retriever;
         this.agentTools = agentTools;
         this.toolCallbackFactory = toolCallbackFactory;
-        this.toolCallingManager = toolCallingManager;
         this.objectMapper = objectMapper;
         this.modelConfigs = modelConfigs;
         this.chatModelFactory = chatModelFactory;
         this.mcpTools = mcpTools;
+        this.agentGraph = agentGraph;
     }
 
     public Flux<ChatChunk> chat(Long agentId, Long conversationId, String userMessage, String userId) {
@@ -104,16 +105,58 @@ public class ChatOrchestrator {
         saveMessage(convId, MessageRole.USER, userMessage, null, null);
 
         BuiltContext ctx = buildContext(agent, convId, userMessage);
+
+        // tools = HTTP-bound tools + MCP tools (+ the built-in planning tool for plan-mode react agents)
         List<Long> toolIds = agentTools.findByAgentId(agent.getId()).stream()
                 .map(AgentToolEntity::getToolId).toList();
         List<ToolCallback> toolCallbacks = new ArrayList<>(toolCallbackFactory.build(toolIds));
         toolCallbacks.addAll(mcpTools.forAgent(agent.getId()));
-        ResolvedModel rm = resolveModel(agent);
-
-        if (AGENT_TYPE_REACT.equals(agent.getAgentType()) && !toolCallbacks.isEmpty()) {
-            return reactChat(agent, convId, ctx, toolCallbacks, rm);
+        boolean planEnabled = AGENT_TYPE_REACT.equals(agent.getAgentType())
+                && Boolean.TRUE.equals(agent.getPlanEnabled());
+        if (planEnabled) {
+            toolCallbacks.add(planTool);
         }
-        return streamChat(agent, convId, ctx, toolCallbacks, rm);
+
+        ResolvedModel rm = resolveModel(agent);
+        // manual tool execution: the graph's tools node runs them and surfaces each step
+        OpenAiChatOptions.Builder ob = baseOptions(agent, rm.modelName()).internalToolExecutionEnabled(false);
+        if (!toolCallbacks.isEmpty()) {
+            ob.toolCallbacks(toolCallbacks);
+        }
+        OpenAiChatOptions options = ob.build();
+
+        List<Message> seed = new ArrayList<>(ctx.messages());
+        if (planEnabled) {
+            seed.add(new SystemMessage(PLAN_HINT));
+        }
+
+        // drive the graph inside the SSE stream: meta + sources up front, then the graph runs
+        // (streaming tokens/steps to the sink as it goes), then persist + done. Errors persist
+        // whatever was produced so the turn isn't lost.
+        return Flux.create(sink -> {
+            AgentGraph.Run run = new AgentGraph.Run();
+            try {
+                sink.next(new ChatChunk(convId, ChatEvents.META, null));
+                for (ChatChunk s : sourceChunks(convId, ctx.sources())) {
+                    sink.next(s);
+                }
+
+                AgentGraph.Ctx gctx = new AgentGraph.Ctx(convId, rm.model(), options, sink::next, run);
+                CompiledGraph graph = agentGraph.build(gctx);
+                Map<String, Object> input = new HashMap<>();
+                input.put(AgentGraph.MESSAGES, seed);
+                input.put(AgentGraph.STEPS, 0);
+                graph.invoke(input, RunnableConfig.builder().threadId(String.valueOf(convId)).build());
+
+                persistAssistant(convId, run.finalText(), toJson(run.trajectory()), run.usage());
+                sink.next(new ChatChunk(convId, ChatEvents.DONE, null));
+                sink.complete();
+            } catch (Exception e) {
+                persistAssistant(convId, run.finalText(), toJson(run.trajectory()), run.usage());
+                sink.next(new ChatChunk(convId, ChatEvents.ERROR, friendly(e)));
+                sink.complete();
+            }
+        });
     }
 
     /** Resolved model endpoint + model id for an agent (per its model config, or the global default). */
@@ -129,116 +172,12 @@ public class ChatOrchestrator {
         return new ResolvedModel(chatModel, agent.getModel());
     }
 
-    // ===== streaming path (chat / rag / tool, framework internal tool execution) =====
-
-    private Flux<ChatChunk> streamChat(AgentEntity agent, Long convId, BuiltContext ctx,
-                                       List<ToolCallback> toolCallbacks, ResolvedModel rm) {
-        OpenAiChatOptions.Builder ob = baseOptions(agent, rm.modelName());
-        if (!toolCallbacks.isEmpty()) {
-            ob.toolCallbacks(toolCallbacks);
-        }
-        Prompt prompt = new Prompt(ctx.messages(), ob.build());
-
-        StringBuilder full = new StringBuilder();
-        AtomicInteger tokenUsage = new AtomicInteger(0);
-
-        Flux<ChatChunk> head = Flux.fromIterable(headChunks(convId, ctx.sources()));
-        Flux<ChatChunk> tokens = rm.model().stream(prompt)
-                .doOnNext(resp -> captureUsage(resp, tokenUsage))
-                .map(resp -> {
-                    String text = resp.getResult().getOutput().getText();
-                    return text != null ? text : "";
-                })
-                .filter(s -> !s.isEmpty())
-                .doOnNext(full::append)
-                .map(s -> new ChatChunk(convId, ChatEvents.TOKEN, s));
-        Flux<ChatChunk> done = Flux.defer(() -> {
-            persistAssistant(convId, full.toString(), null, tokenUsage.get());
-            return Flux.just(new ChatChunk(convId, ChatEvents.DONE, null));
-        });
-
-        return Flux.concat(head, tokens, done)
-                .onErrorResume(err -> {
-                    // persist whatever streamed so the turn isn't lost, then surface the error
-                    persistAssistant(convId, full.toString(), null, tokenUsage.get());
-                    return Flux.just(new ChatChunk(convId, ChatEvents.ERROR, friendly(err)));
-                });
-    }
-
-    // ===== react path (manual tool-calling loop, incremental step events + trajectory) =====
-
-    private Flux<ChatChunk> reactChat(AgentEntity agent, Long convId, BuiltContext ctx,
-                                      List<ToolCallback> toolCallbacks, ResolvedModel rm) {
-        return Flux.create(sink -> {
-            StringBuilder finalText = new StringBuilder();
-            List<Map<String, Object>> trajectory = new ArrayList<>();
-            try {
-                sink.next(new ChatChunk(convId, ChatEvents.META, null));
-                for (ChatChunk s : sourceChunks(convId, ctx.sources())) {
-                    sink.next(s);
-                }
-
-                OpenAiChatOptions options = baseOptions(agent, rm.modelName())
-                        .toolCallbacks(toolCallbacks)
-                        .internalToolExecutionEnabled(false)
-                        .build();
-
-                Prompt prompt = new Prompt(new ArrayList<>(ctx.messages()), options);
-                ChatResponse response = rm.model().call(prompt);
-                int steps = 0;
-
-                while (response.hasToolCalls() && steps < MAX_STEPS) {
-                    List<AssistantMessage.ToolCall> calls = response.getResult().getOutput().getToolCalls();
-                    ToolExecutionResult execResult = toolCallingManager.executeToolCalls(prompt, response);
-                    Map<String, String> resultsById = extractToolResults(execResult);
-
-                    for (AssistantMessage.ToolCall call : calls) {
-                        String result = resultsById.getOrDefault(call.id(), "");
-                        String shortResult = truncate(result, 300);
-                        String args = call.arguments() == null ? "" : call.arguments();
-                        Map<String, Object> entry = new LinkedHashMap<>();
-                        entry.put("tool", call.name());
-                        entry.put("args", args);
-                        entry.put("result", shortResult);
-                        // emit the step as structured JSON so the client can render a tool-call
-                        // list with per-tool args/result drill-down (not a flat pre-joined string)
-                        String stepJson;
-                        try {
-                            stepJson = objectMapper.writeValueAsString(entry);
-                        } catch (Exception e) {
-                            stepJson = "调用 " + call.name() + "(" + args + ") => " + shortResult;
-                        }
-                        sink.next(new ChatChunk(convId, ChatEvents.STEP, stepJson));
-                        trajectory.add(entry);
-                    }
-
-                    prompt = new Prompt(execResult.conversationHistory(), options);
-                    response = rm.model().call(prompt);
-                    steps++;
-                }
-
-                String text = response.getResult().getOutput().getText();
-                if (text != null) finalText.append(text);
-                sink.next(new ChatChunk(convId, ChatEvents.TOKEN, finalText.toString()));
-
-                persistAssistant(convId, finalText.toString(), toJson(trajectory), usageOf(response));
-                sink.next(new ChatChunk(convId, ChatEvents.DONE, null));
-                sink.complete();
-            } catch (Exception e) {
-                persistAssistant(convId, finalText.toString(), toJson(trajectory), null);
-                sink.next(new ChatChunk(convId, ChatEvents.ERROR, friendly(e)));
-                sink.complete();
-            }
-        });
-    }
-
-    // ===== helpers =====
-
-    private List<ChatChunk> headChunks(Long convId, List<RetrieveResult> sources) {
-        List<ChatChunk> head = new ArrayList<>();
-        head.add(new ChatChunk(convId, ChatEvents.META, null));
-        head.addAll(sourceChunks(convId, sources));
-        return head;
+    private OpenAiChatOptions.Builder baseOptions(AgentEntity agent, String modelName) {
+        return OpenAiChatOptions.builder()
+                .model(modelName)
+                .temperature(agent.getTemperature())
+                .maxTokens(agent.getMaxTokens())
+                .topP(agent.getTopP());
     }
 
     private List<ChatChunk> sourceChunks(Long convId, List<RetrieveResult> sources) {
@@ -247,26 +186,6 @@ public class ChatOrchestrator {
             out.add(new ChatChunk(convId, ChatEvents.SOURCE, truncate(s.content(), 160)));
         }
         return out;
-    }
-
-    private Map<String, String> extractToolResults(ToolExecutionResult execResult) {
-        Map<String, String> byId = new HashMap<>();
-        for (Message m : execResult.conversationHistory()) {
-            if (m instanceof ToolResponseMessage trm) {
-                for (ToolResponseMessage.ToolResponse r : trm.getResponses()) {
-                    byId.put(r.id(), r.responseData());
-                }
-            }
-        }
-        return byId;
-    }
-
-    private OpenAiChatOptions.Builder baseOptions(AgentEntity agent, String modelName) {
-        return OpenAiChatOptions.builder()
-                .model(modelName)
-                .temperature(agent.getTemperature())
-                .maxTokens(agent.getMaxTokens())
-                .topP(agent.getTopP());
     }
 
     /** Built prompt messages plus the RAG sources used, so the client can show citations. */
@@ -329,17 +248,6 @@ public class ChatOrchestrator {
         m.setToolCallsJson(toolCallsJson);
         m.setTokenUsage(tokenUsage);
         messages.save(m);
-    }
-
-    private void captureUsage(ChatResponse resp, AtomicInteger holder) {
-        Integer total = usageOf(resp);
-        if (total != null) holder.set(total);
-    }
-
-    private Integer usageOf(ChatResponse resp) {
-        if (resp == null || resp.getMetadata() == null) return null;
-        Usage usage = resp.getMetadata().getUsage();
-        return usage != null ? usage.getTotalTokens() : null;
     }
 
     private String toJson(List<Map<String, Object>> trajectory) {

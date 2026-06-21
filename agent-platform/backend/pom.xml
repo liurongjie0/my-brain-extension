@@ -84,6 +84,42 @@
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-mcp-client</artifactId>
     </dependency>
+    <!-- Spring AI Alibaba Graph: node/state/edge orchestration (StateGraph). Depends on
+         Spring AI 1.0.0 — aligned with our spring-ai.version, no version conflict. Heavy
+         unused transitives (mongo/redisson savers, Tika document parsers) are excluded;
+         fastjson 1.2.83 is pulled in internally for graph serialization — kept by necessity
+         (track CVEs / keep it off any untrusted-input path). -->
+    <dependency>
+      <groupId>com.alibaba.cloud.ai</groupId>
+      <artifactId>spring-ai-alibaba-graph-core</artifactId>
+      <version>1.0.0.2</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.mongodb</groupId>
+          <artifactId>mongodb-driver-sync</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.redisson</groupId>
+          <artifactId>redisson</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.alibaba.cloud.ai</groupId>
+          <artifactId>spring-ai-alibaba-starter-document-parser-tika</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.alibaba.cloud.ai</groupId>
+          <artifactId>spring-ai-alibaba-starter-document-parser-markdown</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.alibaba.cloud.ai</groupId>
+          <artifactId>spring-ai-alibaba-starter-document-parser-bshtml</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.alibaba.cloud.ai</groupId>
+          <artifactId>spring-ai-alibaba-starter-document-parser-yaml</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>

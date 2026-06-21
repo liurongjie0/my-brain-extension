@@ -38,6 +38,10 @@ public class AgentEntity {
 
     private Boolean enabled;
 
+    /** react agents only: maintain a visible task checklist via the built-in write_todos tool */
+    @Column(name = "plan_enabled")
+    private Boolean planEnabled = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -70,6 +74,8 @@ public class AgentEntity {
     public void setModelConfigId(Long modelConfigId) { this.modelConfigId = modelConfigId; }
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public Boolean getPlanEnabled() { return planEnabled; }
+    public void setPlanEnabled(Boolean planEnabled) { this.planEnabled = planEnabled; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

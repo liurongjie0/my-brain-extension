@@ -18,7 +18,7 @@ async function load() {
     list.value = l || []; kbs.value = k || []; tools.value = t || []; models.value = m || []; mcps.value = mc || []
   } finally { loading.value = false }
 }
-function create() { form.value = { agentType: 'chat', temperature: 0.7, maxTokens: 2048, topP: 1.0, enabled: true }; dialog.value = true }
+function create() { form.value = { agentType: 'chat', temperature: 0.7, maxTokens: 2048, topP: 1.0, enabled: true, planEnabled: false }; dialog.value = true }
 function edit(row) { form.value = { ...row }; dialog.value = true }
 async function save() {
   saving.value = true
@@ -97,6 +97,10 @@ onMounted(load)
         </el-form-item>
         <el-form-item label="temperature"><el-input-number v-model="form.temperature" :step="0.1" :min="0" :max="2" /></el-form-item>
         <el-form-item label="maxTokens"><el-input-number v-model="form.maxTokens" :step="128" :min="1" /></el-form-item>
+        <el-form-item v-if="form.agentType === 'react'" label="任务清单">
+          <el-switch v-model="form.planEnabled" />
+          <span style="margin-left:10px;font-size:12px;color:var(--muted)">让 react Agent 用 write_todos 边做边维护可见的步骤清单</span>
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>

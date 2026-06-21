@@ -13,5 +13,6 @@ public record AgentRequest(
         Integer maxTokens,
         String agentType,
         Long modelConfigId,
-        Boolean enabled
+        Boolean enabled,
+        Boolean planEnabled
 ) {}

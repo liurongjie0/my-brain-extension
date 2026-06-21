@@ -9,7 +9,8 @@ import ToolTrace from '../../components/ToolTrace.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   SendHorizontal, Square, Search, Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, Check, Menu,
-  Settings2, Bot, MessageCircle, BookOpen, Wrench, Workflow, Sparkles, Lightbulb, MessageSquare
+  Settings2, Bot, MessageCircle, BookOpen, Wrench, Workflow, Sparkles, Lightbulb, MessageSquare,
+  ListTodo, Circle, CircleDot, CircleCheck
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -95,7 +96,14 @@ async function openConversation(c) {
   currentAgent.value = agents.value.find((a) => a.id === c.agentId) || currentAgent.value
   messages.value = []
   const history = (await api.getMessages(c.id)) || []
-  messages.value = history.map((m) => ({ role: m.role, content: m.content, steps: parseSteps(m.toolCalls), sources: [], error: '' }))
+  messages.value = history.map((m) => {
+    const steps = parseSteps(m.toolCalls)
+    return {
+      role: m.role, content: m.content, steps,
+      blocks: m.role === 'assistant' ? blocksFromHistory(m.content, steps) : [],
+      sources: [], error: ''
+    }
+  })
   scrollToBottom()
 }
 async function renameConversation(c) {
@@ -126,6 +134,52 @@ function scrollToBottom() {
 const pick = (data) => { try { return JSON.parse(data).content || '' } catch (_) { return data } }
 // step content is itself JSON ({tool,args,result,ok}); fall back to legacy string
 const pickStep = (data) => { const c = pick(data); try { return JSON.parse(c) } catch (_) { return c } }
+// plan content is a JSON array of { content, status } todos
+const pickPlan = (data) => { const c = pick(data); try { const a = JSON.parse(c); return Array.isArray(a) ? a : [] } catch (_) { return [] } }
+
+// An assistant turn is an ordered list of blocks so narration, tool calls and the
+// final answer render as one interleaved timeline (说一句话 → 调工具 → 再说一句话),
+// instead of a tool box pinned above a single text blob.
+//   { t: 'text',  v: '...' }        streamed prose (narration or final answer)
+//   { t: 'tools', v: [step, ...] }  a contiguous run of tool calls
+//   { t: 'think', v: '...' }        collapsed reasoning (e.g. DeepSeek reasoning_content)
+function lastBlock(m) { return m.blocks[m.blocks.length - 1] }
+function pushText(m, s) {
+  const b = lastBlock(m)
+  if (b && b.t === 'text') b.v += s
+  else m.blocks.push({ t: 'text', v: s })
+}
+function pushTool(m, step) {
+  const b = lastBlock(m)
+  if (b && b.t === 'tools') b.v.push(step)
+  else m.blocks.push({ t: 'tools', v: [step] })
+}
+function pushThink(m, s) {
+  const b = lastBlock(m)
+  if (b && b.t === 'think') b.v += s
+  else m.blocks.push({ t: 'think', v: s })
+}
+// write_todos resends the whole list each time — update the plan card in place
+function pushPlan(m, todos) {
+  const b = m.blocks.find((x) => x.t === 'plan')
+  if (b) b.v = todos
+  else m.blocks.push({ t: 'plan', v: todos })
+}
+const planIcon = (status) => status === 'completed' ? CircleCheck : (status === 'in_progress' ? CircleDot : Circle)
+// rebuild blocks for a persisted assistant message: plan card, tool trace, then the answer
+function blocksFromHistory(content, steps) {
+  const blocks = []
+  const toolSteps = []
+  let plan = null
+  for (const s of (steps || [])) {
+    if (s && s.tool === 'write_todos') plan = s.plan || []
+    else toolSteps.push(s)
+  }
+  if (plan) blocks.push({ t: 'plan', v: plan })
+  if (toolSteps.length) blocks.push({ t: 'tools', v: toolSteps })
+  if (content) blocks.push({ t: 'text', v: content })
+  return blocks
+}
 
 function useExample(t) { input.value = t; nextTick(() => composer.value && composer.value.focus()) }
 
@@ -148,8 +202,8 @@ async function send() {
   if (!currentAgent.value || !input.value.trim() || sending.value) return
   const text = input.value.trim()
   input.value = ''
-  messages.value.push({ role: 'user', content: text, steps: [] })
-  messages.value.push({ role: 'assistant', content: '', steps: [], sources: [], error: '' })
+  messages.value.push({ role: 'user', content: text, blocks: [], steps: [] })
+  messages.value.push({ role: 'assistant', content: '', blocks: [], steps: [], sources: [], error: '' })
   const assistant = messages.value[messages.value.length - 1]
   const localAbort = new AbortController()
   abort = localAbort
@@ -164,8 +218,10 @@ async function send() {
       onEvent: (e) => {
         if (!live()) return
         if (e.event === 'meta') { try { conversationId.value = JSON.parse(e.data).conversationId } catch (_) {} }
-        else if (e.event === 'token') assistant.content += pick(e.data)
-        else if (e.event === 'step') assistant.steps.push(pickStep(e.data))
+        else if (e.event === 'token') { const t = pick(e.data); pushText(assistant, t); assistant.content += t }
+        else if (e.event === 'think') pushThink(assistant, pick(e.data))
+        else if (e.event === 'plan') pushPlan(assistant, pickPlan(e.data))
+        else if (e.event === 'step') pushTool(assistant, pickStep(e.data))
         else if (e.event === 'source') assistant.sources.push(pick(e.data))
         else if (e.event === 'error') assistant.error = pick(e.data)
         scrollToBottom()
@@ -295,8 +351,27 @@ onMounted(() => { loadAgents(); loadConversations() })
             <template v-if="m.role === 'assistant'">
               <span class="ava sm a-ava"><component :is="agentIcon(currentAgent && currentAgent.agentType)" :size="14" :stroke-width="1.9" /></span>
               <div class="bubble a-bubble">
-                <ToolTrace v-if="m.steps && m.steps.length" :steps="m.steps" class="mb" />
-                <div class="text md" v-html="renderMarkdown(m.content || (i === messages.length - 1 && sending && !m.error ? '思考中…' : ''))"></div>
+                <template v-for="(b, bi) in m.blocks" :key="bi">
+                  <ToolTrace v-if="b.t === 'tools'" :steps="b.v" class="blk" />
+                  <div v-else-if="b.t === 'plan'" class="plan blk">
+                    <div class="plan-head">
+                      <ListTodo :size="14" :stroke-width="2" aria-hidden="true" /> 任务清单
+                      <span class="plan-count">{{ b.v.filter((t) => t.status === 'completed').length }}/{{ b.v.length }}</span>
+                    </div>
+                    <ul class="plan-list">
+                      <li v-for="(td, ti) in b.v" :key="ti" class="plan-item" :class="td.status">
+                        <component :is="planIcon(td.status)" class="pi" :size="15" :stroke-width="2" aria-hidden="true" />
+                        <span class="pt">{{ td.content }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <details v-else-if="b.t === 'think'" class="think blk">
+                    <summary class="think-sum"><Sparkles :size="13" :stroke-width="2" aria-hidden="true" /> 已深度思考</summary>
+                    <div class="think-body">{{ b.v }}</div>
+                  </details>
+                  <div v-else class="text md blk" v-html="renderMarkdown(b.v)"></div>
+                </template>
+                <div v-if="!m.blocks.length && i === messages.length - 1 && sending && !m.error" class="text md typing">思考中…</div>
                 <div v-if="m.error" class="err" role="alert">{{ m.error }}</div>
                 <div v-if="m.sources && m.sources.length" class="sources">
                   <div class="sources-title">引用来源 · {{ m.sources.length }}</div>
@@ -354,20 +429,7 @@ onMounted(() => { loadAgents(); loadConversations() })
 </template>
 
 <style scoped>
-.chat {
-  display: flex; height: 100vh;
-  /* the user page uses a cooler, whiter palette than the warm admin console */
-  --canvas: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f5f6f8;
-  --line: #ececef;
-  --line-soft: #f3f4f6;
-  --ink: #1f2227;
-  --ink-soft: #5a606b;
-  --muted: #8b909b;
-  --sand: #f7f8fa;
-  --sand-deep: #e9eaee;
-}
+.chat { display: flex; height: 100vh; }
 
 /* ---- history rail ---- */
 .history {
@@ -489,20 +551,49 @@ onMounted(() => { loadAgents(); loadConversations() })
 .a-ava { margin-top: 2px; }
 .bubble { max-width: 92%; }
 .u-bubble {
-  background: var(--clay); border: none;
+  background: var(--clay-tint); border: 1px solid #dde2fb;
   border-radius: 16px 16px 5px 16px; padding: 11px 16px;
-  font-size: var(--fs-read); line-height: 1.6; color: #fff; max-width: 80%;
-  box-shadow: 0 3px 10px -3px rgba(76, 102, 224, 0.4);
+  font-size: var(--fs-read); line-height: 1.65; color: #2f3c9e; max-width: 80%;
+  box-shadow: 0 1px 2px rgba(58, 79, 191, 0.07);
   white-space: pre-wrap; word-break: break-word;
 }
-/* assistant content sits in a soft light-gray rounded card */
-.a-bubble {
-  min-width: 0; max-width: 100%;
-  background: var(--surface-2); border-radius: 4px 14px 14px 14px;
-  padding: 13px 16px;
-}
-.mb { margin-bottom: 14px; }
+/* assistant content reads as a clean, full-width document — no bubble card */
+.a-bubble { min-width: 0; max-width: 100%; padding-top: 1px; }
+/* blocks form an interleaved timeline: narration → tools → narration → answer */
+.blk + .blk { margin-top: 14px; }
 .text { line-height: var(--lh-read); color: var(--ink); font-size: var(--fs-read); }
+.typing { color: var(--muted); }
+
+/* collapsed reasoning ("已深度思考"), dimmed and out of the way until expanded */
+.think { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+.think-sum {
+  display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; list-style: none;
+  padding: 7px 12px; font-size: 12.5px; color: var(--muted);
+}
+.think-sum::-webkit-details-marker { display: none; }
+.think-sum::marker { content: ''; }
+.think[open] .think-sum { border-bottom: 1px solid var(--line); }
+.think-body {
+  padding: 10px 12px; font-size: 12.5px; line-height: 1.7; color: var(--ink-soft);
+  white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono);
+}
+
+/* task checklist card (write_todos), updates in place as the agent works */
+.plan { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.plan-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.plan-count { margin-left: auto; font-weight: 500; color: var(--muted); font-feature-settings: "tnum" 1; }
+.plan-list { list-style: none; margin: 0; padding: 6px 0; }
+.plan-item { display: flex; align-items: flex-start; gap: 9px; padding: 5px 12px; font-size: 13.5px; line-height: 1.5; }
+.plan-item .pi { flex-shrink: 0; margin-top: 1px; color: var(--muted); }
+.plan-item .pt { color: var(--ink-soft); }
+.plan-item.in_progress .pi { color: var(--clay); }
+.plan-item.in_progress .pt { color: var(--ink); font-weight: 500; }
+.plan-item.completed .pi { color: #2f9e6f; }
+.plan-item.completed .pt { color: var(--muted); text-decoration: line-through; }
 
 /* ---- refined markdown rendering ---- */
 .text.md :deep(> :first-child) { margin-top: 0; }
@@ -518,9 +609,9 @@ onMounted(() => { loadAgents(); loadConversations() })
 .text.md :deep(li::marker) { color: var(--clay); font-weight: 600; }
 .text.md :deep(li > ul), .text.md :deep(li > ol) { margin: 5px 0 3px; }
 .text.md :deep(code) {
-  background: var(--surface); border: 1px solid var(--line);
+  background: var(--surface-2); border: 1px solid var(--line);
   border-radius: 5px; padding: 1.5px 6px; font-size: 0.86em;
-  font-family: var(--font-mono); color: #c0392b;
+  font-family: var(--font-mono); color: #b0432e;
 }
 .text.md :deep(pre) {
   background: #2c2a28; border-radius: var(--r-md); padding: 13px 15px;

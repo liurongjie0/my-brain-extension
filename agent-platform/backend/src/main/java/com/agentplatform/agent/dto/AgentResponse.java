@@ -17,6 +17,7 @@ public record AgentResponse(
         String agentType,
         Long modelConfigId,
         Boolean enabled,
+        Boolean planEnabled,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         long toolCount,
@@ -32,6 +33,7 @@ public record AgentResponse(
                 e.getId(), e.getName(), e.getDescription(), e.getAvatar(),
                 e.getSystemPrompt(), e.getModel(), e.getTemperature(), e.getTopP(),
                 e.getMaxTokens(), e.getAgentType(), e.getModelConfigId(), e.getEnabled(),
+                Boolean.TRUE.equals(e.getPlanEnabled()),
                 e.getCreatedAt(), e.getUpdatedAt(), toolCount, kbCount, mcpCount);
     }
 }

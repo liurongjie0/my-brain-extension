@@ -74,5 +74,6 @@ public class AgentService {
         e.setAgentType(req.agentType() != null ? req.agentType() : "chat");
         e.setModelConfigId(req.modelConfigId());
         e.setEnabled(req.enabled() != null ? req.enabled() : true);
+        e.setPlanEnabled(req.planEnabled() != null ? req.planEnabled() : false);
     }
 }
