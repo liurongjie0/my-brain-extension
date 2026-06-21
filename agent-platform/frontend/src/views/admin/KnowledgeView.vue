@@ -52,6 +52,19 @@ async function runRetrieve() {
   if (!currentKb.value) return
   retrieveResults.value = (await api.adminKbs.retrieve(currentKb.value.id, retrieveQuery.value, 3)) || []
 }
+async function reprocessDoc(row) {
+  try {
+    await api.adminKbs.reprocessDoc(currentKb.value.id, row.id)
+    ElMessage.success('已重新处理')
+    refreshDocs(); startPolling()
+  } catch (_) { /* interceptor 已提示 */ }
+}
+async function removeDoc(row) {
+  try {
+    await api.adminKbs.removeDoc(currentKb.value.id, row.id)
+    ElMessage.success('已删除'); refreshDocs()
+  } catch (_) { /* interceptor 已提示 */ }
+}
 
 watch(docDialog, (open) => { if (!open) stopPolling() })
 onUnmounted(stopPolling)
@@ -108,7 +121,13 @@ onMounted(load)
             >{{ { pending: '待处理', processing: '处理中', done: '完成', failed: '失败', skipped: '未启用' }[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="chunkCount" label="切片数" width="80" />
+        <el-table-column prop="chunkCount" label="切片数" width="70" />
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button v-if="row.status === 'failed' || row.status === 'skipped'" size="small" @click="reprocessDoc(row)">重试</el-button>
+            <el-button size="small" type="danger" link @click="removeDoc(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-divider>检索测试</el-divider>
       <div style="display:flex;gap:8px">

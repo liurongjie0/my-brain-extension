@@ -76,6 +76,12 @@ public class KnowledgeBaseController {
         return ApiResponse.ok(null);
     }
 
+    @PostMapping("/{id}/documents/{docId}/reprocess")
+    public ApiResponse<Void> reprocessDoc(@PathVariable Long id, @PathVariable Long docId) {
+        documentService.reprocess(docId);
+        return ApiResponse.ok(null);
+    }
+
     // ===== 检索测试 =====
 
     public record RetrieveRequest(String query, Integer topK) {}

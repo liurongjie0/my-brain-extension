@@ -19,7 +19,8 @@ class DocumentServiceTest extends IntegrationTestBase {
         DocumentResponse doc = documentService.upload(kbId, "a.txt", "txt", "hello world content");
         assertThat(doc.id()).isNotNull();
         assertThat(doc.status()).isEqualTo("pending");
-        assertThat(documentService.rawText(doc.id())).isEqualTo("hello world content");
+        // raw text is persisted in the DB row (survives restarts), not a memory map
+        assertThat(documentService.getEntity(doc.id()).getRawText()).isEqualTo("hello world content");
         assertThat(documentService.list(kbId)).extracting(DocumentResponse::id).contains(doc.id());
     }
 }

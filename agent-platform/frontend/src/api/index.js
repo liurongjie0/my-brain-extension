@@ -21,6 +21,7 @@ export const api = {
     remove: (id) => http.delete(`/api/admin/knowledge-bases/${id}`),
     listDocs: (id) => http.get(`/api/admin/knowledge-bases/${id}/documents`),
     removeDoc: (id, docId) => http.delete(`/api/admin/knowledge-bases/${id}/documents/${docId}`),
+    reprocessDoc: (id, docId) => http.post(`/api/admin/knowledge-bases/${id}/documents/${docId}/reprocess`),
     retrieve: (id, query, topK) => http.post(`/api/admin/knowledge-bases/${id}/retrieve`, { query, topK }),
     uploadUrl: (id) => `/api/admin/knowledge-bases/${id}/documents`
   },

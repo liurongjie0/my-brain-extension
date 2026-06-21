@@ -26,6 +26,10 @@ public class DocumentEntity {
     @Column(name = "chunk_count")
     private Integer chunkCount;
 
+    /** original document text, kept so processing survives restarts and can be retried */
+    @Column(name = "raw_text", columnDefinition = "LONGTEXT")
+    private String rawText;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -42,6 +46,8 @@ public class DocumentEntity {
     public void setStatus(String status) { this.status = status; }
     public Integer getChunkCount() { return chunkCount; }
     public void setChunkCount(Integer chunkCount) { this.chunkCount = chunkCount; }
+    public String getRawText() { return rawText; }
+    public void setRawText(String rawText) { this.rawText = rawText; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

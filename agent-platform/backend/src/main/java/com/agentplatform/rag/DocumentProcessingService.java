@@ -39,14 +39,16 @@ public class DocumentProcessingService {
             doc.setStatus("skipped");
             doc.setChunkCount(0);
             documentRepository.save(doc);
-            documentService.clearRawText(docId);
             return;
         }
         doc.setStatus("processing");
         documentRepository.save(doc);
         try {
+            // clear any chunks from a previous/partial run, so reprocessing is idempotent
+            documentService.deleteVectors(docId);
+
             KnowledgeBaseEntity kb = kbService.getEntity(doc.getKbId());
-            String text = documentService.rawText(docId);
+            String text = doc.getRawText();   // source persisted in DB (survives restarts)
             if (text == null || text.isBlank()) {
                 throw new IllegalStateException("empty document text");
             }
@@ -69,10 +71,11 @@ public class DocumentProcessingService {
             doc.setStatus("done");
             documentRepository.save(doc);
         } catch (Exception e) {
+            // a failed run must not leave half-written chunks behind that later pollute retrieval
+            documentService.deleteVectors(docId);
+            doc.setChunkCount(0);
             doc.setStatus("failed");
             documentRepository.save(doc);
-        } finally {
-            documentService.clearRawText(docId);
         }
     }
 }
