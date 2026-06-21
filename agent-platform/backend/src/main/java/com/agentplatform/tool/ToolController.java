@@ -3,6 +3,7 @@ package com.agentplatform.tool;
 import com.agentplatform.common.ApiResponse;
 import com.agentplatform.tool.dto.ToolRequest;
 import com.agentplatform.tool.dto.ToolResponse;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -45,10 +46,16 @@ public class ToolController {
         return ApiResponse.ok(null);
     }
 
-    public record TestRequest(String args) {}
+    // args tolerates both a JSON string ("{\"q\":\"x\"}") and a raw JSON object ({"q":"x"})
+    public record TestRequest(JsonNode args) {}
 
     @PostMapping("/{id}/test")
     public ApiResponse<String> test(@PathVariable Long id, @RequestBody TestRequest req) {
-        return ApiResponse.ok(executor.execute(service.getEntity(id), req.args()).body());
+        return ApiResponse.ok(executor.execute(service.getEntity(id), toArgsJson(req.args())).body());
+    }
+
+    private String toArgsJson(JsonNode args) {
+        if (args == null || args.isNull()) return "{}";
+        return args.isTextual() ? args.asText() : args.toString();
     }
 }
