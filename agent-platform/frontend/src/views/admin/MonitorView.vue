@@ -9,7 +9,11 @@ async function load() {
   loading.value = true
   try { data.value = await api.metrics() } finally { loading.value = false }
 }
-function rateType(r) { return r >= 95 ? 'success' : r >= 80 ? 'warning' : 'danger' }
+function progressStatus(r) {
+  if (r >= 95) return 'success'
+  if (r < 80) return 'exception'
+  return undefined
+}
 onMounted(load)
 </script>
 
@@ -41,7 +45,7 @@ onMounted(load)
       <el-table-column prop="success" label="成功" width="100" />
       <el-table-column label="成功率" width="220">
         <template #default="{ row }">
-          <el-progress :percentage="row.successRate" :status="rateType(row.successRate) === 'success' ? 'success' : rateType(row.successRate) === 'danger' ? 'exception' : ''" />
+          <el-progress :percentage="row.successRate" :status="progressStatus(row.successRate)" />
         </template>
       </el-table-column>
     </el-table>

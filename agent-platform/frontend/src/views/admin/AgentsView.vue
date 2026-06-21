@@ -22,7 +22,11 @@ async function save() {
   dialog.value = false; ElMessage.success('已保存'); load()
 }
 async function remove(row) { await api.adminAgents.remove(row.id); ElMessage.success('已删除'); load() }
-function openBind(row) { bindForm.value = { id: row.id, kbIds: [], toolIds: [], mcpIds: [] }; bindDialog.value = true }
+async function openBind(row) {
+  const b = await api.adminAgents.getBindings(row.id)
+  bindForm.value = { id: row.id, kbIds: b.kbIds || [], toolIds: b.toolIds || [], mcpIds: b.mcpIds || [] }
+  bindDialog.value = true
+}
 async function saveBind() {
   await api.adminAgents.bindings(bindForm.value.id, {
     kbIds: bindForm.value.kbIds, toolIds: bindForm.value.toolIds, mcpIds: bindForm.value.mcpIds

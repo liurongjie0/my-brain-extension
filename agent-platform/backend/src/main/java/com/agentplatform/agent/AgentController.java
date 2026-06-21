@@ -60,6 +60,20 @@ public class AgentController {
 
     public record BindingsRequest(List<Long> kbIds, List<Long> toolIds, List<Long> mcpIds) {}
 
+    public record BindingsResponse(List<Long> kbIds, List<Long> toolIds, List<Long> mcpIds) {}
+
+    @GetMapping("/api/admin/agents/{id}/bindings")
+    public ApiResponse<BindingsResponse> getBindings(@PathVariable Long id) {
+        service.get(id); // validate agent exists
+        List<Long> kbIds = agentKnowledgeBaseRepository.findByAgentId(id).stream()
+                .map(AgentKnowledgeBaseEntity::getKbId).toList();
+        List<Long> toolIds = agentToolRepository.findByAgentId(id).stream()
+                .map(AgentToolEntity::getToolId).toList();
+        List<Long> mcpIds = agentMcpRepository.findByAgentId(id).stream()
+                .map(AgentMcpEntity::getMcpId).toList();
+        return ApiResponse.ok(new BindingsResponse(kbIds, toolIds, mcpIds));
+    }
+
     @Transactional
     @PutMapping("/api/admin/agents/{id}/bindings")
     public ApiResponse<Void> bindings(@PathVariable Long id, @RequestBody BindingsRequest req) {

@@ -10,6 +10,7 @@ export const api = {
     create: (data) => http.post('/api/admin/agents', data),
     update: (id, data) => http.put(`/api/admin/agents/${id}`, data),
     remove: (id) => http.delete(`/api/admin/agents/${id}`),
+    getBindings: (id) => http.get(`/api/admin/agents/${id}/bindings`),
     bindings: (id, data) => http.put(`/api/admin/agents/${id}/bindings`, data)
   },
   adminKbs: {
