@@ -96,6 +96,8 @@ async function openConversation(c) {
   currentAgent.value = agents.value.find((a) => a.id === c.agentId) || currentAgent.value
   messages.value = []
   const history = (await api.getMessages(c.id)) || []
+  // guard against a slow response overwriting a newer conversation switch (race)
+  if (conversationId.value !== c.id) return
   messages.value = history.map((m) => {
     const steps = parseSteps(m.toolCalls)
     return {

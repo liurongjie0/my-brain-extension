@@ -4,6 +4,7 @@ import com.agentplatform.agent.dto.AgentRequest;
 import com.agentplatform.agent.dto.AgentResponse;
 import com.agentplatform.common.BusinessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -53,8 +54,16 @@ public class AgentService {
         return AgentResponse.from(repository.save(e));
     }
 
+    @Transactional
     public void delete(Long id) {
-        repository.delete(find(id));
+        AgentEntity e = find(id);
+        // clear binding rows first (they FK-reference agent.id, so deleting the agent while
+        // bindings exist would otherwise fail / leave orphan rows that a reused id mis-binds).
+        // Conversations are intentionally left intact (don't destroy chat history on agent delete).
+        toolRepo.deleteByAgentId(id);
+        kbRepo.deleteByAgentId(id);
+        mcpRepo.deleteByAgentId(id);
+        repository.delete(e);
     }
 
     private AgentEntity find(Long id) {

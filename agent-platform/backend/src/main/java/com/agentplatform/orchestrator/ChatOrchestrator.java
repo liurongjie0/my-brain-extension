@@ -32,11 +32,13 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Orchestrates a chat turn. The actual think→act→observe control flow is a Spring AI Alibaba
@@ -135,23 +137,39 @@ public class ChatOrchestrator {
         // whatever was produced so the turn isn't lost.
         return Flux.create(sink -> {
             AgentGraph.Run run = new AgentGraph.Run();
+            AtomicBoolean cancelled = new AtomicBoolean(false);
+            Sinks.Empty<Void> cancelSink = Sinks.empty();
+            // client "stop" / disconnect → flip the flag and complete the cancel signal so the
+            // graph's agent node truncates its model stream and the loop routes straight to END
+            sink.onCancel(() -> { cancelled.set(true); cancelSink.tryEmitEmpty(); });
             try {
                 sink.next(new ChatChunk(convId, ChatEvents.META, null));
                 for (ChatChunk s : sourceChunks(convId, ctx.sources())) {
                     sink.next(s);
                 }
 
-                AgentGraph.Ctx gctx = new AgentGraph.Ctx(convId, rm.model(), options, sink::next, run);
+                AgentGraph.Ctx gctx = new AgentGraph.Ctx(convId, rm.model(), options, sink::next,
+                        run, cancelled, cancelSink.asMono());
                 CompiledGraph graph = agentGraph.build(gctx);
                 Map<String, Object> input = new HashMap<>();
                 input.put(AgentGraph.MESSAGES, seed);
                 input.put(AgentGraph.STEPS, 0);
                 graph.invoke(input, RunnableConfig.builder().threadId(String.valueOf(convId)).build());
 
+                if (cancelled.get()) {
+                    persistIfProduced(convId, run);  // client gone — keep only real output, no done/error
+                    sink.complete();
+                    return;
+                }
                 persistAssistant(convId, run.finalText(), toJson(run.trajectory()), run.usage());
                 sink.next(new ChatChunk(convId, ChatEvents.DONE, null));
                 sink.complete();
             } catch (Exception e) {
+                if (cancelled.get()) {
+                    persistIfProduced(convId, run);
+                    sink.complete();
+                    return;
+                }
                 persistAssistant(convId, run.finalText(), toJson(run.trajectory()), run.usage());
                 sink.next(new ChatChunk(convId, ChatEvents.ERROR, friendly(e)));
                 sink.complete();
@@ -238,6 +256,16 @@ public class ChatOrchestrator {
     private void persistAssistant(Long convId, String content, String toolCallsJson, Integer tokenUsage) {
         saveMessage(convId, MessageRole.ASSISTANT, content, toolCallsJson, tokenUsage);
         conversations.touch(convId);
+    }
+
+    /**
+     * On a cancelled turn, persist only if something was actually produced — avoids leaving an
+     * empty/half assistant message that would pollute the next turn's context.
+     */
+    private void persistIfProduced(Long convId, AgentGraph.Run run) {
+        if (!run.finalText().isBlank() || !run.trajectory().isEmpty()) {
+            persistAssistant(convId, run.finalText(), toJson(run.trajectory()), run.usage());
+        }
     }
 
     private void saveMessage(Long convId, String role, String content, String toolCallsJson, Integer tokenUsage) {

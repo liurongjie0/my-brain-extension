@@ -4,6 +4,8 @@ import com.agentplatform.IntegrationTestBase;
 import com.agentplatform.agent.dto.AgentRequest;
 import com.agentplatform.agent.dto.AgentResponse;
 import com.agentplatform.common.BusinessException;
+import com.agentplatform.tool.ToolService;
+import com.agentplatform.tool.dto.ToolRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -14,6 +16,10 @@ class AgentServiceTest extends IntegrationTestBase {
 
     @Autowired
     AgentService service;
+    @Autowired
+    AgentToolRepository agentToolRepo;
+    @Autowired
+    ToolService toolService;
 
     @Test
     void create_applies_defaults() {
@@ -48,5 +54,21 @@ class AgentServiceTest extends IntegrationTestBase {
     void get_missing_throws() {
         assertThatThrownBy(() -> service.get(999999L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void delete_cascades_tool_binding() {
+        var tool = toolService.create(new ToolRequest("cas", "x", "POST",
+                "http://example.com/x", null, "{\"type\":\"object\",\"properties\":{}}", true));
+        AgentResponse a = service.create(new AgentRequest("cas-agent", null, null, null,
+                "m", null, null, null, "tool", null, null, null));
+        agentToolRepo.save(new AgentToolEntity(a.id(), tool.id()));
+        assertThat(agentToolRepo.findByAgentId(a.id())).isNotEmpty();
+
+        service.delete(a.id());
+
+        // binding row is cleared (no orphan / FK violation) and the agent is gone
+        assertThat(agentToolRepo.findByAgentId(a.id())).isEmpty();
+        assertThatThrownBy(() -> service.get(a.id())).isInstanceOf(BusinessException.class);
     }
 }

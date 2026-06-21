@@ -21,11 +21,14 @@ import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
+import reactor.core.publisher.Mono;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static com.alibaba.cloud.ai.graph.action.AsyncEdgeAction.edge_async;
@@ -78,9 +81,14 @@ public class AgentGraph {
         public Integer usage() { return usage; }
     }
 
-    /** Per-request context the nodes close over: who to call, with what options, where to emit. */
+    /**
+     * Per-request context the nodes close over: who to call, with what options, where to emit,
+     * plus a cancellation flag + signal so a client "stop" actually halts the model stream
+     * and breaks the loop (instead of the server running the turn to completion).
+     */
     public record Ctx(Long convId, ChatModel model, OpenAiChatOptions options,
-                      Consumer<ChatChunk> emit, Run run) {}
+                      Consumer<ChatChunk> emit, Run run,
+                      AtomicBoolean cancelled, Mono<Void> cancelSignal) {}
 
     /** Build + compile a fresh graph for one request. */
     public CompiledGraph build(Ctx ctx) throws GraphStateException {
@@ -95,7 +103,7 @@ public class AgentGraph {
                 .addNode("agent", node_async(agentNode(ctx)))
                 .addNode("tools", node_async(toolsNode(ctx)))
                 .addEdge(StateGraph.START, "agent")
-                .addConditionalEdges("agent", edge_async(routeEdge()),
+                .addConditionalEdges("agent", edge_async(routeEdge(ctx)),
                         Map.of("tools", "tools", "end", StateGraph.END))
                 .addEdge("tools", "agent");
 
@@ -109,12 +117,21 @@ public class AgentGraph {
     /** Stream one model turn: emit token/think deltas live, stash the tool-bearing response. */
     private NodeAction agentNode(Ctx ctx) {
         return state -> {
+            // client already stopped before this turn started → produce nothing, route to END
+            if (ctx.cancelled().get()) {
+                Map<String, Object> out = new HashMap<>();
+                out.put(HAS_TOOLS, false);
+                return out;
+            }
             List<Message> msgs = state.<List<Message>>value(MESSAGES).orElseGet(List::of);
             Prompt prompt = new Prompt(new ArrayList<>(msgs), ctx.options());
 
             StringBuilder turnText = new StringBuilder();
             List<ChatResponse> chunks = new ArrayList<>();
             ctx.model().stream(prompt)
+                    // a client "stop" completes cancelSignal → truncates this stream and cancels
+                    // the upstream HTTP request, so generation (and token spend) actually halts
+                    .takeUntilOther(ctx.cancelSignal())
                     .doOnNext(resp -> {
                         chunks.add(resp);
                         String think = reasoningOf(resp);
@@ -197,8 +214,9 @@ public class AgentGraph {
     }
 
     /** Loop back into tools while the last turn asked for them and the step budget remains. */
-    private EdgeAction routeEdge() {
+    private EdgeAction routeEdge(Ctx ctx) {
         return state -> {
+            if (ctx.cancelled().get()) return "end";  // stop the loop on client cancel
             boolean hasTools = state.value(HAS_TOOLS, false);
             int steps = state.value(STEPS, 0);
             return (hasTools && steps < MAX_STEPS) ? "tools" : "end";
