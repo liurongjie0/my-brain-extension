@@ -116,7 +116,7 @@ onMounted(load)
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag
-              size="small"
+              size="small" disable-transitions
               :type="row.status === 'done' ? 'success' : row.status === 'failed' ? 'danger' : 'info'"
             >{{ { pending: '待处理', processing: '处理中', done: '完成', failed: '失败', skipped: '未启用' }[row.status] || row.status }}</el-tag>
           </template>

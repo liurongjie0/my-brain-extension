@@ -41,7 +41,7 @@ onMounted(load)
     </el-table>
     <el-dialog v-model="dialog" title="会话轨迹" width="700">
       <div v-for="(m, i) in msgs" :key="i" style="margin-bottom:12px">
-        <el-tag size="small">{{ roleLabel[m.role] || m.role }}</el-tag>
+        <el-tag size="small" disable-transitions>{{ roleLabel[m.role] || m.role }}</el-tag>
         <ToolTrace
           v-if="m.role === 'assistant' && m.steps.length"
           :steps="m.steps" style="margin-top:6px"

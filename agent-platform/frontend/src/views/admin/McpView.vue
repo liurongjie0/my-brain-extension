@@ -44,7 +44,7 @@ onMounted(load)
       <el-table-column prop="transport" label="传输" width="90" />
       <el-table-column prop="url" label="URL" />
       <el-table-column prop="enabled" label="启用" width="80">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag></template>
+        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'" disable-transitions>{{ row.enabled ? '是' : '否' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="240">
         <template #default="{ row }">
@@ -78,7 +78,7 @@ onMounted(load)
       <div v-loading="testing" :element-loading-text="testing ? '连接中…' : ''" style="min-height:72px">
         <div v-if="testTools.length">
           <div style="margin-bottom:8px;color:var(--muted);font-size:13px">该 MCP 暴露的工具：</div>
-          <el-tag v-for="t in testTools" :key="t" style="margin:0 6px 6px 0">{{ t }}</el-tag>
+          <el-tag v-for="t in testTools" :key="t" style="margin:0 6px 6px 0" disable-transitions>{{ t }}</el-tag>
         </div>
         <el-empty v-else-if="!testing" description="未发现工具或连接失败" :image-size="80" />
       </div>

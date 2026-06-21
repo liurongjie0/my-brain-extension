@@ -61,7 +61,7 @@ onMounted(load)
       <el-table-column prop="agentType" label="类型" width="90" />
       <el-table-column prop="model" label="模型" />
       <el-table-column prop="enabled" label="启用" width="80">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag></template>
+        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'" disable-transitions>{{ row.enabled ? '是' : '否' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="220">
         <template #default="{ row }">

@@ -40,7 +40,7 @@ onMounted(load)
       <el-table-column prop="baseUrl" label="Base URL" />
       <el-table-column prop="apiKeyMasked" label="Key" width="160" />
       <el-table-column prop="enabled" label="启用" width="80">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag></template>
+        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'" disable-transitions>{{ row.enabled ? '是' : '否' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="180">
         <template #default="{ row }">
