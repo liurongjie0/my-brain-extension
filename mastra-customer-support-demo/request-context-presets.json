@@ -1,0 +1,23 @@
+{
+  "中文 VIP 客户": {
+    "locale": "zh-CN",
+    "customerTier": "vip",
+    "tenantId": "demo-store-cn",
+    "supportChannel": "studio",
+    "preferredTone": "concise"
+  },
+  "中文普通客户": {
+    "locale": "zh-CN",
+    "customerTier": "standard",
+    "tenantId": "demo-store-cn",
+    "supportChannel": "studio",
+    "preferredTone": "friendly"
+  },
+  "English Escalation": {
+    "locale": "en-US",
+    "customerTier": "vip",
+    "tenantId": "demo-store-us",
+    "supportChannel": "email",
+    "preferredTone": "precise"
+  }
+}
