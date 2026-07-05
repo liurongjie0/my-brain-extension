@@ -17,4 +17,12 @@ describe('Mastra advanced registry', () => {
       'support-policy-mcp',
     );
   });
+
+  it('registers the multi-agent travel demo modules', () => {
+    expect(mastra.getAgent('travelPlannerAgent').id).toBe('travel-planner-agent');
+    expect(mastra.getAgent('transportAgent').id).toBe('transport-agent');
+    expect(mastra.getAgent('lodgingAgent').id).toBe('lodging-agent');
+    expect(mastra.getWorkflow('itineraryWorkflow').id).toBe('itinerary-workflow');
+    expect(mastra.listMemory()?.travelMemory.id).toBe('travel-memory');
+  });
 });

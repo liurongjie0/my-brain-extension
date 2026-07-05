@@ -18,7 +18,7 @@ npm install --package-lock=false
 
 The CLI workflow demos use only mock data and do not need a model API key.
 
-Mastra Studio and `supportAgent` chat use the configured model. By default this demo uses `deepseek/deepseek-v4-flash`, so set `DEEPSEEK_API_KEY` before asking the agent to generate responses in Studio.
+Mastra Studio and `supportAgent` chat use the configured model. By default this demo uses `deepseek/deepseek-chat`, so set `DEEPSEEK_API_KEY` before asking the agent to generate responses in Studio. Set `SUPPORT_AGENT_MODEL` to switch to another model (for example `openai/gpt-4o-mini`).
 
 ## Run
 
@@ -46,7 +46,9 @@ The demo registers:
 
 - LibSQL storage at `.mastra/support-demo.db`
 - Support Agent memory with working memory
-- Storage-backed observability traces
+- Storage-backed observability traces, with metrics and logs in an in-memory
+  observability store (LibSQL does not support metrics; in-memory data resets
+  on every dev-server restart)
 - Secret redaction and token-limit processors
 - A local Support Policy MCP server
 - A deterministic Support Reply Quality scorer
@@ -77,6 +79,29 @@ Expected behavior:
 - The script resumes the same run with an approved decision.
 - A mock refund is created after approval.
 
+## Multi-Agent Travel Demo
+
+`travel-planner-agent` is a routing (supervisor) agent that plans short hiking
+trips near Shanghai by dispatching work to other primitives, multi-turn until
+the plan is complete:
+
+- sub-agents: `transport-agent` and `lodging-agent` (each with its own search
+  tool over mock data),
+- a deterministic `itinerary-workflow` that assembles the day-by-day plan and
+  budget once options are chosen,
+- direct tools: `search-trails` and `build-packing-list`,
+- working memory that keeps confirmed choices, so a follow-up like "预算砍到每晚
+  150" re-dispatches only the lodging agent and re-runs the workflow.
+
+Try it in Studio (chat with `Travel Planner Agent` and watch the delegation
+in the tool-call panel), or run the scripted two-turn CLI demo (requires the
+model API key, `DEEPSEEK_API_KEY` by default; set `TRAVEL_AGENT_MODEL` to
+switch models):
+
+```bash
+npm run demo:travel
+```
+
 ## Test
 
 ```bash
@@ -92,11 +117,22 @@ The tests cover the pure refund rules so they run without a model provider.
 - `src/domain/refunds.ts` contains refund policy, risk, approval, and mock execution logic.
 - `src/domain/refunds.test.ts` covers the core rules.
 - `src/mastra/advanced/` configures local storage, memory, observability, processors, MCP, request context, and scorers.
+- `src/mastra/schemas.ts` contains the shared zod schemas for tools and workflows.
 - `src/mastra/tools/refund-tools.ts` exposes domain functions as Mastra tools.
 - `src/mastra/agents/support-agent.ts` defines the support agent.
 - `src/mastra/workflows/refund-workflow.ts` defines the suspend/resume refund workflow.
+- `src/domain/travel.ts` contains mock trails, transport, lodging, and itinerary logic.
+- `src/mastra/travel-schemas.ts` contains the travel zod schemas.
+- `src/mastra/tools/travel-tools.ts` exposes travel domain functions as Mastra tools.
+- `src/mastra/agents/travel-agents.ts` defines the travel routing agent and its sub-agents.
+- `src/mastra/workflows/itinerary-workflow.ts` assembles itineraries deterministically.
 - `scripts/demo-auto.ts` runs the automatic path.
 - `scripts/demo-approval.ts` runs the approval path.
+- `scripts/demo-travel.ts` runs the two-turn multi-agent travel demo.
+
+## Troubleshooting
+
+If a new Studio tab hangs loading forever while `curl http://localhost:4111` responds instantly, close the other `localhost:4111` tabs and reload. Each dev-mode Studio tab holds several persistent connections (hot-reload watcher, polling), and Chrome allows at most 6 HTTP/1.1 connections per host — once older tabs consume the quota, new navigations queue indefinitely.
 
 ## Notes
 

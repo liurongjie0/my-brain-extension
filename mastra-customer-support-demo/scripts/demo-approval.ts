@@ -8,7 +8,6 @@ const initialResult = await run.start({
   inputData: {
     orderId: 'ord_high_value_recent',
     customerMessage: 'The workstation bundle was delivered damaged. Please refund the full order.',
-    nowIso: '2026-07-05T00:00:00.000Z',
   },
   outputOptions: {
     includeResumeLabels: true,

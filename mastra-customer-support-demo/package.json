@@ -9,10 +9,13 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "demo:auto": "tsx scripts/demo-auto.ts",
-    "demo:approval": "tsx scripts/demo-approval.ts"
+    "demo:approval": "tsx scripts/demo-approval.ts",
+    "demo:travel": "tsx --env-file-if-exists=.env scripts/demo-travel.ts",
+    "fix:datasets": "tsx scripts/normalize-dataset-items.ts"
   },
   "dependencies": {
     "@mastra/core": "latest",
+    "@mastra/editor": "^0.13.4",
     "@mastra/libsql": "^1.15.0",
     "@mastra/mcp": "^1.13.0",
     "@mastra/memory": "^1.22.1",

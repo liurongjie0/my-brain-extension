@@ -12,6 +12,12 @@ export interface Order {
   refundHistoryCount: number;
 }
 
+// Delivery dates are generated relative to the current time so the demo
+// scenarios (inside/outside the 30-day refund window) stay valid on any date.
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
 export const mockOrders: Record<string, Order> = {
   ord_small_recent: {
     id: 'ord_small_recent',
@@ -21,7 +27,7 @@ export const mockOrders: Record<string, Order> = {
     status: 'delivered',
     totalCents: 3499,
     currency: 'USD',
-    deliveredAt: '2026-06-30T12:00:00.000Z',
+    deliveredAt: isoDaysAgo(5),
     refundHistoryCount: 0,
   },
   ord_high_value_recent: {
@@ -32,7 +38,7 @@ export const mockOrders: Record<string, Order> = {
     status: 'delivered',
     totalCents: 129900,
     currency: 'USD',
-    deliveredAt: '2026-07-01T12:00:00.000Z',
+    deliveredAt: isoDaysAgo(4),
     refundHistoryCount: 0,
   },
   ord_old_delivery: {
@@ -43,7 +49,7 @@ export const mockOrders: Record<string, Order> = {
     status: 'delivered',
     totalCents: 12999,
     currency: 'USD',
-    deliveredAt: '2026-05-01T12:00:00.000Z',
+    deliveredAt: isoDaysAgo(65),
     refundHistoryCount: 1,
   },
 };

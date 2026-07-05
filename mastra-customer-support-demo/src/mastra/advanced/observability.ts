@@ -25,6 +25,10 @@ export const supportObservability = new Observability({
         }),
       ],
       requestContextKeys: supportObservabilityRequestContextKeys,
+      logging: {
+        enabled: true,
+        level: 'info',
+      },
     },
   },
 });

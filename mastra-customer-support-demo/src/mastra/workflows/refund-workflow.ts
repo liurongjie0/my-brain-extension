@@ -4,58 +4,25 @@ import { getMockOrder } from '../../domain/orders.ts';
 import {
   assessRefundPolicy,
   decideRefundApproval,
+  draftRefundReply,
   executeMockRefund,
   scoreRefundRisk,
 } from '../../domain/refunds.ts';
-
-const orderSchema = z.object({
-  id: z.string(),
-  customerId: z.string(),
-  customerName: z.string(),
-  itemName: z.string(),
-  status: z.enum(['delivered', 'processing', 'cancelled', 'refunded']),
-  totalCents: z.number().int().nonnegative(),
-  currency: z.literal('USD'),
-  deliveredAt: z.string().nullable(),
-  refundHistoryCount: z.number().int().nonnegative(),
-});
-
-const policySchema = z.object({
-  eligible: z.boolean(),
-  reason: z.string(),
-  refundableCents: z.number().int().nonnegative(),
-  daysSinceDelivery: z.number().int().nullable(),
-});
-
-const riskSchema = z.object({
-  level: z.enum(['low', 'medium', 'high']),
-  reasons: z.array(z.string()),
-});
-
-const decisionSchema = z.object({
-  status: z.enum(['auto-approved', 'needs-approval', 'rejected']),
-  requiresHumanApproval: z.boolean(),
-  reason: z.string(),
-});
-
-const approvalSchema = z.object({
-  approved: z.boolean(),
-  note: z.string().optional(),
-});
-
-const refundSchema = z.object({
-  providerRefundId: z.string(),
-  orderId: z.string(),
-  amountCents: z.number().int().nonnegative(),
-  currency: z.literal('USD'),
-  status: z.literal('succeeded'),
-  approvalNote: z.string().optional(),
-});
+import {
+  approvalSchema,
+  decisionSchema,
+  localeSchema,
+  orderSchema,
+  policySchema,
+  refundSchema,
+  riskSchema,
+} from '../schemas.ts';
 
 const workflowInputSchema = z.object({
   orderId: z.string(),
   customerMessage: z.string(),
   nowIso: z.string().optional(),
+  locale: localeSchema.optional(),
 });
 
 const lookupOutputSchema = workflowInputSchema.extend({
@@ -197,27 +164,22 @@ export const draftRefundReplyStep = createStep({
   inputSchema: executionOutputSchema,
   outputSchema: workflowOutputSchema,
   execute: async ({ inputData }) => {
+    const { order, policy, risk, decision, approval, locale } = inputData;
+    const common = { orderId: order.id, policy, risk, decision, approval };
+
     if (inputData.approvalStatus === 'rejected') {
       return {
         status: 'rejected' as const,
-        orderId: inputData.order.id,
-        reply: `Hi ${inputData.order.customerName}, I checked your ${inputData.order.itemName} order and cannot issue a refund because ${inputData.policy.reason}`,
-        policy: inputData.policy,
-        risk: inputData.risk,
-        decision: inputData.decision,
-        approval: inputData.approval,
+        reply: draftRefundReply({ order, policy, decision }, locale),
+        ...common,
       };
     }
 
     if (inputData.approvalStatus === 'declined') {
       return {
         status: 'declined' as const,
-        orderId: inputData.order.id,
-        reply: `Hi ${inputData.order.customerName}, your refund request for ${inputData.order.itemName} was reviewed, but we cannot approve it right now.`,
-        policy: inputData.policy,
-        risk: inputData.risk,
-        decision: inputData.decision,
-        approval: inputData.approval,
+        reply: draftRefundReply({ order, policy, decision, humanDeclined: true }, locale),
+        ...common,
       };
     }
 
@@ -228,13 +190,9 @@ export const draftRefundReplyStep = createStep({
 
     return {
       status: 'refunded' as const,
-      orderId: inputData.order.id,
-      reply: `Hi ${inputData.order.customerName}, your refund for ${inputData.order.itemName} has been approved and processed for $${(refund.amountCents / 100).toFixed(2)}.`,
-      policy: inputData.policy,
-      risk: inputData.risk,
-      decision: inputData.decision,
+      reply: draftRefundReply({ order, policy, decision, refund }, locale),
       refund,
-      approval: inputData.approval,
+      ...common,
     };
   },
 });

@@ -4,52 +4,40 @@ import { getMockOrder } from '../../domain/orders.ts';
 import {
   assessRefundPolicy,
   decideRefundApproval,
+  draftRefundReply,
   executeMockRefund,
+  processRefundRequest,
   scoreRefundRisk,
 } from '../../domain/refunds.ts';
+import {
+  approvalSchema,
+  decisionSchema,
+  localeSchema,
+  orderSchema,
+  policySchema,
+  refundProcessSchema,
+  refundSchema,
+  riskSchema,
+} from '../schemas.ts';
 
-const orderSchema = z.object({
-  id: z.string(),
-  customerId: z.string(),
-  customerName: z.string(),
-  itemName: z.string(),
-  status: z.enum(['delivered', 'processing', 'cancelled', 'refunded']),
-  totalCents: z.number().int().nonnegative(),
-  currency: z.literal('USD'),
-  deliveredAt: z.string().nullable(),
-  refundHistoryCount: z.number().int().nonnegative(),
+export const handleRefundRequestInputSchema = z.object({
+  orderId: z.string().describe('Mock order ID, such as ord_small_recent.'),
+  locale: localeSchema.default('zh-CN'),
 });
 
-const policySchema = z.object({
-  eligible: z.boolean(),
-  reason: z.string(),
-  refundableCents: z.number().int().nonnegative(),
-  daysSinceDelivery: z.number().int().nullable(),
-});
-
-const riskSchema = z.object({
-  level: z.enum(['low', 'medium', 'high']),
-  reasons: z.array(z.string()),
-});
-
-const decisionSchema = z.object({
-  status: z.enum(['auto-approved', 'needs-approval', 'rejected']),
-  requiresHumanApproval: z.boolean(),
-  reason: z.string(),
-});
-
-const approvalSchema = z.object({
-  approved: z.boolean(),
-  note: z.string().optional(),
-});
-
-const refundSchema = z.object({
-  providerRefundId: z.string(),
-  orderId: z.string(),
-  amountCents: z.number().int().nonnegative(),
-  currency: z.literal('USD'),
-  status: z.literal('succeeded'),
-  approvalNote: z.string().optional(),
+export const handleRefundRequestTool = createTool({
+  id: 'handle-refund-request',
+  description:
+    'Handle a refund request end-to-end using an order ID and locale, then return traceable support steps.',
+  inputSchema: handleRefundRequestInputSchema,
+  outputSchema: z.object({
+    process: refundProcessSchema,
+  }),
+  execute: async ({ orderId, locale }) => ({
+    process: processRefundRequest(orderId, {
+      locale,
+    }),
+  }),
 });
 
 export const lookupOrderTool = createTool({
@@ -137,31 +125,30 @@ export const draftRefundReplyTool = createTool({
     policy: policySchema,
     decision: decisionSchema,
     refund: refundSchema.optional(),
+    locale: localeSchema.default('en-US'),
   }),
   outputSchema: z.object({
     reply: z.string(),
   }),
-  execute: async ({ order, policy, decision, refund }) => {
-    if (!policy.eligible || decision.status === 'rejected') {
-      return {
-        reply: `Hi ${order.customerName}, I checked your ${order.itemName} order and cannot issue a refund because ${policy.reason}`,
-      };
-    }
-
-    if (decision.status === 'needs-approval' && !refund) {
-      return {
-        reply: `Hi ${order.customerName}, your refund request for ${order.itemName} needs a quick human review before we process it.`,
-      };
-    }
-
-    const amount = refund ? `$${(refund.amountCents / 100).toFixed(2)}` : 'the full amount';
-    return {
-      reply: `Hi ${order.customerName}, your refund for ${order.itemName} has been approved and processed for ${amount}.`,
-    };
-  },
+  execute: async ({ order, policy, decision, refund, locale }) => ({
+    reply: draftRefundReply({ order, policy, decision, refund }, locale),
+  }),
 });
 
 export const refundTools = {
+  handleRefundRequestTool,
+  lookupOrderTool,
+  assessRefundPolicyTool,
+  scoreRefundRiskTool,
+  decideRefundApprovalTool,
+  issueMockRefundTool,
+  draftRefundReplyTool,
+};
+
+// The chat agent gets the granular tools so each decision step is a visible
+// tool call; the one-shot handleRefundRequestTool stays available for
+// programmatic use and the Studio tools page.
+export const supportAgentRefundTools = {
   lookupOrderTool,
   assessRefundPolicyTool,
   scoreRefundRiskTool,

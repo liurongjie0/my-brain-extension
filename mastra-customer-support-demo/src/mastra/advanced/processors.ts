@@ -20,10 +20,11 @@ export const supportInputProcessors = [
   supportTokenLimiterProcessor,
 ];
 
-export const supportOutputProcessors = [
-  supportSecretRedactionProcessor,
-  supportTokenLimiterProcessor,
-];
+// The token limiter stays input-only: in streaming mode its cumulative count
+// includes every stream event (reasoning deltas, tool-call deltas, metadata),
+// so a 4k budget is exhausted mid-stream and the rest of the reply is
+// silently dropped.
+export const supportOutputProcessors = [supportSecretRedactionProcessor];
 
 export const supportProcessors = {
   supportSecretRedactionProcessor,
