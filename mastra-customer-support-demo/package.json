@@ -1,0 +1,30 @@
+{
+  "name": "mastra-customer-support-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "dev:zh": "tsx scripts/dev-zh.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "demo:auto": "tsx scripts/demo-auto.ts",
+    "demo:approval": "tsx scripts/demo-approval.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/libsql": "^1.15.0",
+    "@mastra/mcp": "^1.13.0",
+    "@mastra/memory": "^1.22.1",
+    "@mastra/observability": "^1.15.2",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "esbuild": "latest",
+    "mastra": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
