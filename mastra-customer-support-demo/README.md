@@ -91,7 +91,11 @@ the plan is complete:
   budget once options are chosen,
 - direct tools: `search-trails` and `build-packing-list`,
 - working memory that keeps confirmed choices, so a follow-up like "预算砍到每晚
-  150" re-dispatches only the lodging agent and re-runs the workflow.
+  150" re-dispatches only the lodging agent and re-runs the workflow,
+- a workspace with an Agent Skill (`workspace/skills/hiking-safety/`): the
+  planner gets `skill` / `skill_read` / `skill_search` tools and loads the
+  safety guidelines on demand (progressive disclosure) instead of carrying
+  them in its system prompt.
 
 Try it in Studio (chat with `Travel Planner Agent` and watch the delegation
 in the tool-call panel), or run the scripted two-turn CLI demo (requires the
@@ -125,6 +129,8 @@ The tests cover the pure refund rules so they run without a model provider.
 - `src/mastra/travel-schemas.ts` contains the travel zod schemas.
 - `src/mastra/tools/travel-tools.ts` exposes travel domain functions as Mastra tools.
 - `src/mastra/agents/travel-agents.ts` defines the travel routing agent and its sub-agents.
+- `src/mastra/travel-workspace.ts` mounts `workspace/` with the hiking-safety skill.
+- `workspace/skills/hiking-safety/` is the Agent Skill (SKILL.md + references).
 - `src/mastra/workflows/itinerary-workflow.ts` assembles itineraries deterministically.
 - `scripts/demo-auto.ts` runs the automatic path.
 - `scripts/demo-approval.ts` runs the approval path.

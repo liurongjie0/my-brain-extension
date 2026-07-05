@@ -5,6 +5,7 @@ import {
   searchTransportTool,
   travelPlannerDirectTools,
 } from '../tools/travel-tools.ts';
+import { travelWorkspace } from '../travel-workspace.ts';
 import { itineraryWorkflow } from '../workflows/itinerary-workflow.ts';
 
 export const defaultTravelAgentModel = 'deepseek/deepseek-chat';
@@ -110,6 +111,10 @@ Primitives you can dispatch, and when:
 - itineraryWorkflow: run it once transport and lodging are chosen, with the
   chosen option IDs, to assemble the day-by-day plan and budget summary.
 - buildPackingListTool: gear list for the trail and season, near the end.
+- Workspace skills (skill / skill_read / skill_search tools): load the
+  hiking-safety skill before finalizing any plan for a moderate or hard
+  trail, or whenever the user asks about safety or is a beginner; base the
+  safety section on it instead of general knowledge.
 
 Process:
 1. If the departure city, trip length, or budget is missing, ask the user
@@ -131,6 +136,7 @@ Reply in Chinese when the user writes Chinese.
   // the loop budget is wider than a single-agent chat.
   defaultOptions: { maxSteps: 15 },
   memory: travelMemory,
+  workspace: travelWorkspace,
   agents: travelPlannerSubAgents,
   workflows: travelPlannerWorkflows,
   tools: travelPlannerDirectTools,

@@ -62,6 +62,10 @@ Mastra supervisor 模式——子 agent 通过 `agents` 配置挂载后自动成
 - registry 测试扩展：新资源注册断言。
 - 路由 LLM 的实际分派行为不做自动化测试（需要模型 key），由 demo 脚本 / Studio 人工验证。
 
+## Workspace + Agent Skills（2026-07-06 扩展）
+
+路由 agent 挂载 `travelWorkspace`（`src/mastra/travel-workspace.ts`，LocalFilesystem 指向项目 `workspace/`，`skills: ['skills']`），自动获得 `skill` / `skill_read` / `skill_search` 三个工具。内置一个 `hiking-safety` skill（`workspace/skills/hiking-safety/SKILL.md` + `references/emergency.md`）：徒步安全守则与应急处置，按渐进披露原则由 agent 需要时自行加载，而不进系统提示词。instructions 要求：moderate 以上线路出最终方案前、或用户问安全/自称新手时必须加载该 skill。测试断言 workspace 能发现并加载该 skill；demo 脚本第 4 轮验证运行时分派。
+
 ## Demo 入口
 
 - Studio：`npm run dev`，选 `travel-planner-agent` 聊天，观察工具调用面板中的分派轨迹。
