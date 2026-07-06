@@ -12,6 +12,7 @@
     "demo:approval": "tsx scripts/demo-approval.ts",
     "demo:travel": "tsx --env-file-if-exists=.env scripts/demo-travel.ts",
     "seed:rag": "tsx scripts/seed-knowledge.ts",
+    "demo:advanced": "tsx --env-file-if-exists=.env scripts/demo-advanced.ts",
     "fix:datasets": "tsx scripts/normalize-dataset-items.ts"
   },
   "dependencies": {

@@ -116,6 +116,14 @@ You are a lodging specialist for short hiking trips.
 export const travelPlannerSubAgents = { transportAgent, lodgingAgent };
 export const travelPlannerWorkflows = { itineraryWorkflow };
 
+// Model fallback chain: retry the primary once, then fail over to the
+// reasoner model (same DEEPSEEK_API_KEY) so transient provider errors do not
+// kill a routing turn.
+export const travelPlannerModelChain = [
+  { id: 'primary', model: travelAgentModel, maxRetries: 1 },
+  { id: 'fallback', model: 'deepseek/deepseek-reasoner', maxRetries: 1 },
+];
+
 export const travelPlannerAgent = new Agent({
   id: 'travel-planner-agent',
   name: 'Travel Planner Agent',
@@ -159,7 +167,11 @@ relay the trade-off to the user and ask how to proceed.
 
 Reply in Chinese when the user writes Chinese.
 `,
-  model: travelAgentModel,
+  model: travelPlannerModelChain,
+  // Agent goals (experimental): when a caller sets an objective via
+  // setObjective(), this judge model grades each loop pass and the agent
+  // keeps working until the objective is met or maxRuns is exhausted.
+  goal: { judge: travelAgentModel, maxRuns: 3 },
   // Routing turns fan out into sub-agent calls, workflow runs, and tools, so
   // the loop budget is wider than a single-agent chat.
   defaultOptions: { maxSteps: 15 },

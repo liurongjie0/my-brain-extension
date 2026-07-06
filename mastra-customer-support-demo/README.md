@@ -101,7 +101,26 @@ the plan is complete:
   index into DuckDBVector; the planner queries it via `search-hiking-guides`,
 - semantic recall on travel memory: past conversation turns are embedded into
   the same DuckDB vector store and retrieved by similarity, on top of working
-  memory and the recent-message window.
+  memory and the recent-message window,
+- a model fallback chain (`deepseek-chat` with one retry, then
+  `deepseek-reasoner`) so transient provider failures do not kill a turn,
+- an experimental agent goal: `setObjective()` makes a judge model grade each
+  pass until the objective is met (see `npm run demo:advanced`).
+
+The support agent additionally demonstrates:
+
+- dynamic instructions assembled per request from `requestContext`
+  (`customerTier=vip` adds a VIP addendum; `preferredTone` adjusts style) —
+  try the request-context presets in Studio,
+- consuming an external MCP server: `MCPClient` spawns the support-policy MCP
+  server over stdio and merges its `policyDocs_*` tools into the agent's
+  toolset at request time.
+
+Structured output and goals demo (requires the model API key):
+
+```bash
+npm run demo:advanced
+```
 
 Try it in Studio (chat with `Travel Planner Agent` and watch the delegation
 in the tool-call panel), or run the scripted two-turn CLI demo (requires the

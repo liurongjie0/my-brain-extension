@@ -7,6 +7,7 @@ import {
   transportAgent,
   travelMemory,
   travelMemoryOptions,
+  travelPlannerModelChain,
   travelPlannerSubAgents,
   travelPlannerWorkflows,
 } from './travel-agents.ts';
@@ -52,5 +53,13 @@ describe('travel planner supervisor wiring', () => {
 
   it('exposes the RAG guide-search tool to the routing agent', () => {
     expect(searchGuidesTool.id).toBe('search-hiking-guides');
+  });
+
+  it('falls back from the primary model to the reasoner model', () => {
+    expect(travelPlannerModelChain.map((entry) => entry.id)).toEqual([
+      'primary',
+      'fallback',
+    ]);
+    expect(travelPlannerModelChain[1].model).toBe('deepseek/deepseek-reasoner');
   });
 });
