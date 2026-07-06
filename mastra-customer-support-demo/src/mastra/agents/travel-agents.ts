@@ -1,5 +1,11 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { createVectorQueryTool } from '@mastra/rag';
+import {
+  travelEmbedder,
+  travelKnowledgeIndexName,
+  travelVector,
+} from '../travel-vector.ts';
 import {
   searchLodgingTool,
   searchTransportTool,
@@ -29,9 +35,17 @@ export const travelWorkingMemoryTemplate = `# 旅行规划记忆
 
 export const travelMemoryOptions = {
   id: 'travel-memory',
+  // Local fastembed embeddings + the shared DuckDB vector store let semantic
+  // recall search older conversation turns without any embedding API key.
+  vector: travelVector,
+  embedder: travelEmbedder,
   options: {
     lastMessages: 20,
-    semanticRecall: false,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+      scope: 'resource',
+    },
     generateTitle: true,
     workingMemory: {
       enabled: true,
@@ -42,6 +56,17 @@ export const travelMemoryOptions = {
 } as const;
 
 export const travelMemory = new Memory(travelMemoryOptions);
+
+// RAG: retrieval over knowledge/*.md hiking guides, indexed by
+// scripts/seed-knowledge.ts into the shared DuckDB vector store.
+export const searchGuidesTool = createVectorQueryTool({
+  id: 'search-hiking-guides',
+  description:
+    'Search the hiking guide knowledge base (seasons, route details, resupply points, hazards) for facts beyond the mock trail data. Chinese queries work best.',
+  vectorStore: travelVector,
+  indexName: travelKnowledgeIndexName,
+  model: travelEmbedder,
+});
 
 export const transportAgent = new Agent({
   id: 'transport-agent',
@@ -104,6 +129,9 @@ data yourself.
 Primitives you can dispatch, and when:
 - searchTrailsTool: find or confirm the trail whenever the destination is new
   or ambiguous.
+- search-hiking-guides: retrieval over curated hiking guides — use it for
+  seasons, route conditions, resupply points, and local tips that the mock
+  trail data does not cover; cite what it returns instead of guessing.
 - Transport Agent (sub-agent): everything about getting there — pass the
   departure city and trail ID, get back options and a recommendation.
 - Lodging Agent (sub-agent): everything about where to stay — pass the trail
@@ -139,5 +167,5 @@ Reply in Chinese when the user writes Chinese.
   workspace: travelWorkspace,
   agents: travelPlannerSubAgents,
   workflows: travelPlannerWorkflows,
-  tools: travelPlannerDirectTools,
+  tools: { ...travelPlannerDirectTools, searchGuidesTool },
 });

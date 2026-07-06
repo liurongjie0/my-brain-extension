@@ -95,7 +95,13 @@ the plan is complete:
 - a workspace with an Agent Skill (`workspace/skills/hiking-safety/`): the
   planner gets `skill` / `skill_read` / `skill_search` tools and loads the
   safety guidelines on demand (progressive disclosure) instead of carrying
-  them in its system prompt.
+  them in its system prompt,
+- RAG over `knowledge/*.md` hiking guides: run `npm run seed:rag` once to
+  chunk (per `##` section), embed locally with fastembed (no API key), and
+  index into DuckDBVector; the planner queries it via `search-hiking-guides`,
+- semantic recall on travel memory: past conversation turns are embedded into
+  the same DuckDB vector store and retrieved by similarity, on top of working
+  memory and the recent-message window.
 
 Try it in Studio (chat with `Travel Planner Agent` and watch the delegation
 in the tool-call panel), or run the scripted two-turn CLI demo (requires the
@@ -131,6 +137,8 @@ The tests cover the pure refund rules so they run without a model provider.
 - `src/mastra/agents/travel-agents.ts` defines the travel routing agent and its sub-agents.
 - `src/mastra/travel-workspace.ts` mounts `workspace/` with the hiking-safety skill.
 - `workspace/skills/hiking-safety/` is the Agent Skill (SKILL.md + references).
+- `src/mastra/travel-vector.ts` is the shared DuckDB vector store + local embedder.
+- `knowledge/` holds the hiking guides; `scripts/seed-knowledge.ts` indexes them.
 - `src/mastra/workflows/itinerary-workflow.ts` assembles itineraries deterministically.
 - `scripts/demo-auto.ts` runs the automatic path.
 - `scripts/demo-approval.ts` runs the approval path.

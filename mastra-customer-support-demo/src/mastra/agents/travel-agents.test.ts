@@ -3,8 +3,10 @@ import {
   defaultTravelAgentModel,
   lodgingAgent,
   resolveTravelAgentModel,
+  searchGuidesTool,
   transportAgent,
   travelMemory,
+  travelMemoryOptions,
   travelPlannerSubAgents,
   travelPlannerWorkflows,
 } from './travel-agents.ts';
@@ -39,5 +41,16 @@ describe('travel planner supervisor wiring', () => {
 
   it('tracks multi-turn planning state in travel memory', () => {
     expect(travelMemory.id).toBe('travel-memory');
+  });
+
+  it('enables semantic recall over past conversation turns', () => {
+    expect(travelMemoryOptions.options.semanticRecall).toMatchObject({
+      topK: 3,
+      scope: 'resource',
+    });
+  });
+
+  it('exposes the RAG guide-search tool to the routing agent', () => {
+    expect(searchGuidesTool.id).toBe('search-hiking-guides');
   });
 });

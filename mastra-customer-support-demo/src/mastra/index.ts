@@ -15,6 +15,7 @@ import { supportReplyQualityScorer } from './advanced/scorers.ts';
 import { supportStorage } from './advanced/storage.ts';
 import { refundTools } from './tools/refund-tools.ts';
 import { travelTools } from './tools/travel-tools.ts';
+import { travelVector } from './travel-vector.ts';
 import { itineraryWorkflow } from './workflows/itinerary-workflow.ts';
 import { refundWorkflow } from './workflows/refund-workflow.ts';
 
@@ -29,6 +30,7 @@ export const mastra = new Mastra({
   workflows: { refundWorkflow, itineraryWorkflow },
   processors: supportProcessors,
   memory: { supportMemory, travelMemory },
+  vectors: { travelVector },
   mcpServers: supportMcpServers,
   scorers: { supportReplyQualityScorer },
 });
