@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { supportMcpClient } from '../advanced/mcp-client.ts';
 import { supportMemory } from '../advanced/memory.ts';
 import {
   supportInputProcessors,
@@ -92,7 +93,13 @@ export const supportAgent = new Agent({
   inputProcessors: supportInputProcessors,
   outputProcessors: supportOutputProcessors,
   maxProcessorRetries: 1,
-  tools: supportAgentRefundTools,
+  // Static refund tools plus tools consumed from an external MCP server via
+  // MCPClient (namespaced policyDocs_*); resolved lazily per request so the
+  // stdio server is only spawned when the agent actually runs.
+  tools: async () => ({
+    ...supportAgentRefundTools,
+    ...(await supportMcpClient.listTools()),
+  }),
   // Score every live reply so the Studio evaluation pages have data;
   // lower the rate if this were real traffic.
   scorers: {
