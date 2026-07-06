@@ -1,7 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+import {
+  FilesystemStore,
+  InMemoryStore,
+  MastraCompositeStore,
+} from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 import { LibSQLStore } from '@mastra/libsql';
 
@@ -22,10 +26,14 @@ const supportLibsqlStore = new LibSQLStore({
 // observability domain (traces/metrics/logs shown in Studio) goes to an
 // embedded OLAP DuckDB file and survives restarts. Everything else
 // (threads, memory, workflow runs) stays in LibSQL.
-const supportObservabilityDuckdbStore = new DuckDBStore({
-  id: 'support-demo-observability',
-  path: resolve(supportStorageDir, 'support-demo-observability.duckdb'),
-});
+// DuckDB holds a single-process write lock, so parallel vitest workers fall
+// back to in-memory observability instead of fighting over the file.
+const supportObservabilityDomain = process.env.VITEST
+  ? new InMemoryStore({ id: 'support-demo-observability' }).stores.observability
+  : new DuckDBStore({
+      id: 'support-demo-observability',
+      path: resolve(supportStorageDir, 'support-demo-observability.duckdb'),
+    }).observability;
 
 // Editor domains (Studio-edited agents, prompt blocks, MCP configs, ...) are
 // stored as JSON files in the repo so edits are reviewable via git.
@@ -38,6 +46,6 @@ export const supportStorage = new MastraCompositeStore({
   default: supportLibsqlStore,
   editor: supportEditorStore,
   domains: {
-    observability: supportObservabilityDuckdbStore.observability,
+    observability: supportObservabilityDomain,
   },
 });

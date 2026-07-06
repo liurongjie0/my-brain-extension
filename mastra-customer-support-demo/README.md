@@ -88,7 +88,13 @@ the plan is complete:
 - sub-agents: `transport-agent` and `lodging-agent` (each with its own search
   tool over mock data),
 - a deterministic `itinerary-workflow` that assembles the day-by-day plan and
-  budget once options are chosen,
+  budget once options are chosen — its transport and lodging lookups run
+  under `.parallel()`,
+- a `compare-trips-workflow` showing advanced control flow: `.foreach()` fans
+  out cost calculation per candidate trail (concurrency 3), a ranking step
+  sorts them, and `.branch()` picks between a within-budget recommendation
+  and an over-budget explanation — ask the planner "预算 1000 从上海出发去哪条线最划算"
+  to see it dispatched,
 - direct tools: `search-trails` and `build-packing-list`,
 - working memory that keeps confirmed choices, so a follow-up like "预算砍到每晚
   150" re-dispatches only the lodging agent and re-runs the workflow,

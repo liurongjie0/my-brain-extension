@@ -12,6 +12,7 @@ import {
   travelPlannerDirectTools,
 } from '../tools/travel-tools.ts';
 import { travelWorkspace } from '../travel-workspace.ts';
+import { compareTripsWorkflow } from '../workflows/compare-trips-workflow.ts';
 import { itineraryWorkflow } from '../workflows/itinerary-workflow.ts';
 
 export const defaultTravelAgentModel = 'deepseek/deepseek-chat';
@@ -114,7 +115,7 @@ You are a lodging specialist for short hiking trips.
 // Exported separately so tests can assert the supervisor wiring without
 // reaching into Agent internals.
 export const travelPlannerSubAgents = { transportAgent, lodgingAgent };
-export const travelPlannerWorkflows = { itineraryWorkflow };
+export const travelPlannerWorkflows = { itineraryWorkflow, compareTripsWorkflow };
 
 // Model fallback chain: retry the primary once, then fail over to the
 // reasoner model (same DEEPSEEK_API_KEY) so transient provider errors do not
@@ -146,6 +147,9 @@ Primitives you can dispatch, and when:
   ID and the per-night budget, get back options and a recommendation.
 - itineraryWorkflow: run it once transport and lodging are chosen, with the
   chosen option IDs, to assemble the day-by-day plan and budget summary.
+- compareTripsWorkflow: when the user has not fixed a destination and asks
+  which trip is cheapest or best for a budget, run it with the departure
+  city, party size, and total budget in cents; relay its ranking verbatim.
 - buildPackingListTool: gear list for the trail and season, near the end.
 - Workspace skills (skill / skill_read / skill_search tools): load the
   hiking-safety skill before finalizing any plan for a moderate or hard

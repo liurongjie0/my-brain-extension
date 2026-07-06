@@ -16,6 +16,7 @@ import { supportStorage } from './advanced/storage.ts';
 import { refundTools } from './tools/refund-tools.ts';
 import { travelTools } from './tools/travel-tools.ts';
 import { travelVector } from './travel-vector.ts';
+import { compareTripsWorkflow } from './workflows/compare-trips-workflow.ts';
 import { itineraryWorkflow } from './workflows/itinerary-workflow.ts';
 import { refundWorkflow } from './workflows/refund-workflow.ts';
 
@@ -27,7 +28,7 @@ export const mastra = new Mastra({
   // with each specialist directly, not only through the routing agent.
   agents: { supportAgent, travelPlannerAgent, transportAgent, lodgingAgent },
   tools: { ...refundTools, ...travelTools },
-  workflows: { refundWorkflow, itineraryWorkflow },
+  workflows: { refundWorkflow, itineraryWorkflow, compareTripsWorkflow },
   processors: supportProcessors,
   memory: { supportMemory, travelMemory },
   vectors: { travelVector },

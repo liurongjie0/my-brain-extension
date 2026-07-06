@@ -36,8 +36,11 @@ describe('travel planner supervisor wiring', () => {
     expect(lodgingAgent.getDescription()).toBeTruthy();
   });
 
-  it('exposes the itinerary workflow to the routing agent', () => {
-    expect(Object.keys(travelPlannerWorkflows)).toEqual(['itineraryWorkflow']);
+  it('exposes the itinerary and comparison workflows to the routing agent', () => {
+    expect(Object.keys(travelPlannerWorkflows)).toEqual([
+      'itineraryWorkflow',
+      'compareTripsWorkflow',
+    ]);
   });
 
   it('tracks multi-turn planning state in travel memory', () => {
