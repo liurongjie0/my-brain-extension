@@ -17,11 +17,7 @@ export function resolveSupportAgentModel(
 
 export const supportAgentModel = resolveSupportAgentModel();
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  description: 'Customer-support agent for mock refund requests.',
-  instructions: `
+export const supportAgentBaseInstructions = `
 You are a careful customer-support agent for refund requests.
 
 When a customer asks for a refund:
@@ -39,7 +35,51 @@ When a customer asks for a refund:
 - Include a concise "处理过程" summary of the steps you took.
 - Keep customer replies concise, calm, and specific.
 - Prefer Chinese when the user writes Chinese or requestContext.locale is zh-CN.
-`,
+`;
+
+export interface SupportInstructionContext {
+  customerTier?: string;
+  preferredTone?: string;
+}
+
+// Dynamic-agent demo: the effective system prompt is assembled per request
+// from requestContext (set via Studio's request-context presets or API
+// callers), so one code-defined agent adapts per tenant/tier without forks.
+export function buildSupportInstructions(
+  context: SupportInstructionContext = {},
+): string {
+  const sections = [supportAgentBaseInstructions];
+
+  if (context.customerTier === 'vip') {
+    sections.push(`
+VIP customer addendum:
+- Address the customer politely by name and thank them for their loyalty.
+- When a refund needs human approval, proactively state the expected review
+  turnaround (within 2 hours) and offer to expedite.
+- Where policy allows a choice, prefer the customer-favorable interpretation.
+`);
+  }
+
+  if (context.preferredTone === 'concise') {
+    sections.push('Style: keep the reply under 5 sentences, no filler.');
+  } else if (context.preferredTone === 'precise') {
+    sections.push(
+      'Style: cite exact policy windows, amounts, and dates in every reply.',
+    );
+  }
+
+  return sections.join('\n');
+}
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  description: 'Customer-support agent for mock refund requests.',
+  instructions: ({ requestContext }) =>
+    buildSupportInstructions({
+      customerTier: requestContext.get('customerTier') as string | undefined,
+      preferredTone: requestContext.get('preferredTone') as string | undefined,
+    }),
   model: supportAgentModel,
   // Studio's editor can still override these instructions: stored versions
   // saved in the UI take precedence, and the code value is the fallback.
