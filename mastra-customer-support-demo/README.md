@@ -46,9 +46,9 @@ The demo registers:
 
 - LibSQL storage at `.mastra/support-demo.db`
 - Support Agent memory with working memory
-- Storage-backed observability traces, with metrics and logs in an in-memory
-  observability store (LibSQL does not support metrics; in-memory data resets
-  on every dev-server restart)
+- Persistent observability (traces, metrics, logs) in an embedded DuckDB file
+  at `.mastra/support-demo-observability.duckdb` — LibSQL cannot store metrics,
+  so the observability domain is composed onto DuckDB
 - Secret redaction and token-limit processors
 - A local Support Policy MCP server
 - A deterministic Support Reply Quality scorer
