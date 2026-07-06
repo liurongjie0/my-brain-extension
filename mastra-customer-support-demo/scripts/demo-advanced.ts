@@ -64,3 +64,29 @@ console.log('\n');
 
 const objective = await agent.getObjective({ threadId: goalThread });
 console.log('objective 判定记录:', JSON.stringify(objective, null, 2));
+
+// ---------------------------------------------------------------------------
+// 3) Workspace sandbox: the agent verifies arithmetic by executing code.
+// ---------------------------------------------------------------------------
+console.log('\n=== Workspace Sandbox：agent 在沙箱里执行代码核算 ===\n');
+
+const sandboxStream = await agent.stream(
+  '我们 3 个人走徽杭古道两天，高铁往返（¥156/人单程），住蓝天凹客栈一晚 ¥260 一间房、需要两间。请在沙箱里跑代码精确核算总费用和人均费用，并给出你运行的命令。',
+  {
+    memory: { thread: 'demo-sandbox-thread', resource: 'demo-advanced-user' },
+    maxSteps: 8,
+  },
+);
+
+for await (const chunk of sandboxStream.fullStream as AsyncIterable<{
+  type: string;
+  payload?: Record<string, unknown>;
+}>) {
+  if (chunk.type === 'tool-call') {
+    const args = JSON.stringify(chunk.payload?.args ?? {});
+    console.log(`→ 分派 ${String(chunk.payload?.toolName ?? '')} ${args.slice(0, 160)}`);
+  } else if (chunk.type === 'text-delta') {
+    process.stdout.write(String(chunk.payload?.text ?? ''));
+  }
+}
+console.log();

@@ -105,7 +105,12 @@ the plan is complete:
 - a model fallback chain (`deepseek-chat` with one retry, then
   `deepseek-reasoner`) so transient provider failures do not kill a turn,
 - an experimental agent goal: `setObjective()` makes a judge model grade each
-  pass until the objective is met (see `npm run demo:advanced`).
+  pass until the objective is met (see `npm run demo:advanced`),
+- a workspace sandbox (`LocalSandbox`, scratch dir `.mastra/sandbox`): the
+  planner gets `execute_command` and file tools and is instructed to verify
+  cost arithmetic by running `node -e` in the sandbox; only PATH is inherited
+  from the host env, with macOS seatbelt isolation where available — swap in
+  `@mastra/docker` / `@mastra/e2b` for hard isolation.
 
 The support agent additionally demonstrates:
 

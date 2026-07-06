@@ -151,6 +151,10 @@ Primitives you can dispatch, and when:
   hiking-safety skill before finalizing any plan for a moderate or hard
   trail, or whenever the user asks about safety or is a beginner; base the
   safety section on it instead of general knowledge.
+- Workspace sandbox (execute_command and file tools): when the user asks for
+  precise cost breakdowns or comparisons, verify the arithmetic by running a
+  small node -e script in the sandbox instead of computing in your head, and
+  show the command you ran.
 
 Process:
 1. If the departure city, trip length, or budget is missing, ask the user
